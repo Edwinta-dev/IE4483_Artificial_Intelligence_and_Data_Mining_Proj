@@ -171,7 +171,9 @@ def _fit(model, train_loader, val_loader, cfg, extra, run_dir, device, accumulat
         raise ValueError("train.optimizer must be adamw or sgd")
     schedule = extra["scheduler"].lower()
     if schedule == "cosine":
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max(1, cfg.train.epochs))
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=max(1, cfg.train.epochs - extra["warmup_epochs"])
+        )
     elif schedule == "step":
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=extra["step_size"], gamma=extra["gamma"])
     elif schedule == "none":

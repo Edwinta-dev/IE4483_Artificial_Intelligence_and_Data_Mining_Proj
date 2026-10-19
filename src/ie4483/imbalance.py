@@ -62,7 +62,8 @@ class FocalLoss(nn.Module):
                                          label_smoothing=self.label_smoothing, reduction="none")
         if self.gamma == 0:
             return ce.mean()
-        return (((1 - torch.exp(-ce)).clamp_min(0) ** self.gamma) * ce).mean()
+        true_class_probability = logits.softmax(dim=1).gather(1, target.unsqueeze(1)).squeeze(1)
+        return (((1 - true_class_probability).clamp_min(0) ** self.gamma) * ce).mean()
 
 
 def write_class_counts(path: str | Path, counts: dict[int | str, int]) -> None:

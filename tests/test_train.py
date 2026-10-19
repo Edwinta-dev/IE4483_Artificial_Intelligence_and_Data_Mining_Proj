@@ -130,6 +130,35 @@ def test_patience_zero_stops_on_first_validation_loss_regression(tmp_path, monke
     assert len(rows) == 2
 
 
+def test_cosine_schedule_reaches_minimum_after_final_warmup_adjusted_epoch(tmp_path, monkeypatch):
+    import ie4483.train as training
+
+    class Tiny(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.head = torch.nn.Linear(2, 2)
+
+        def forward(self, x):
+            return self.head(x)
+
+    monkeypatch.setattr(training, "_epoch", lambda *args, **kwargs: (1.0, 0.5))
+    cfg = SimpleNamespace(
+        train=SimpleNamespace(batch_size=2, learning_rate=0.1, gradient_accumulation_steps=1,
+                              mixed_precision=False, epochs=4),
+        eval=SimpleNamespace(batch_size=2),
+    )
+    data = (torch.ones(2, 2), torch.tensor([0, 1]))
+    training._fit(Tiny(), torch.utils.data.DataLoader(torch.utils.data.TensorDataset(*data), batch_size=2),
+                  torch.utils.data.DataLoader(torch.utils.data.TensorDataset(*data), batch_size=2), cfg,
+                  {"optimizer": "adamw", "weight_decay": 0.0, "scheduler": "cosine", "patience": 10,
+                   "class_weights": None, "label_smoothing": 0.0, "warmup_epochs": 1},
+                  tmp_path, torch.device("cpu"))
+    checkpoint = torch.load(tmp_path / "last.pt", map_location="cpu", weights_only=False)
+    assert checkpoint["scheduler"]["T_max"] == 3
+    assert checkpoint["scheduler"]["last_epoch"] == 3
+    assert checkpoint["optimizer"]["param_groups"][0]["lr"] == pytest.approx(0.0)
+
+
 def test_weighted_sampler_and_class_weights_work_on_image_folders(tmp_path, monkeypatch):
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     _images(tmp_path, "train")

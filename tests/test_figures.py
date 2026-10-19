@@ -25,3 +25,4 @@ def test_report_model_artifacts_match_forward_shapes(tmp_path, architecture: str
     assert f"Input shape: `{summary['input_shape']}`" in text
     assert f"Output shape: `{summary['output_shape']}`" in text
     assert f"{summary['trainable_parameters']:,} trainable / {summary['total_parameters']:,} total" in text
+    assert "Selection: best.pt by validation accuracy; early stopping by validation loss." in text

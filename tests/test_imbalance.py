@@ -41,6 +41,16 @@ def test_weighted_sampler_is_balanced_and_focal_gamma_zero_is_ce():
     torch.testing.assert_close(FocalLoss(0)(logits, target), torch.nn.functional.cross_entropy(logits, target))
 
 
+def test_focal_loss_uses_true_class_probability_with_label_smoothing():
+    logits = torch.tensor([[2.0, -0.5, 0.25], [-0.2, 1.1, 0.4]])
+    target = torch.tensor([0, 2])
+    gamma, smoothing = 1.5, 0.2
+    ce = torch.nn.functional.cross_entropy(logits, target, label_smoothing=smoothing, reduction="none")
+    probability = logits.softmax(dim=1).gather(1, target[:, None]).squeeze(1)
+    expected = (((1 - probability) ** gamma) * ce).mean()
+    torch.testing.assert_close(FocalLoss(gamma, label_smoothing=smoothing)(logits, target), expected)
+
+
 def test_macro_metrics_average_classes_not_examples():
     metrics = _scores([0, 0, 0, 1], [0, 0, 0, 0], 0.0, ["majority", "minority"])
     assert metrics["accuracy"] == 0.75

@@ -92,6 +92,7 @@ def write_model_card(model: nn.Module, config: Any, training: dict[str, Any], ou
 - Optimizer: {training['optimizer'].upper()}
 - Learning rate: {config.train.learning_rate:g} (head); backbone {training['backbone_learning_rate']:g}
 - Schedule: {schedule}
+- Selection: best.pt by validation accuracy; early stopping by validation loss.
 - Parameters: {summary['trainable_parameters']:,} trainable / {summary['total_parameters']:,} total
 """
     card = output / "model_card.md"
