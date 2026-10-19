@@ -38,6 +38,25 @@ C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/evaluate.py --run runs/pa
 Evaluation writes per-class scores and a ten-by-ten confusion matrix in the
 run folder, including macro-F1 and macro recall. No dataset is downloaded by tests.
 
+To exercise the binary Dogs vs Cats pipeline before the cleaned images arrive,
+the owner can fetch CIFAR-10 and materialize its cat (class 3) and dog (class 5)
+images as a marked stand-in dataset. The generator uses the existing seeded
+training-batch split, writes an unlabeled numeric-ID test folder from
+`test_batch`, and records source identities and hashes in a manifest. Its
+metrics include `"proxy": true`; these scores are only a pipeline check and
+must never be reported as Dogs vs Cats results. This owner workflow needs
+network access for the one-time CIFAR fetch and a GPU for practical 224-pixel
+training, although the generator and pipeline tests run on CPU.
+
+```powershell
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/fetch_cifar10.py
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/fetch_weights.py
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/make_proxy_catdog.py --cifar-root data --out data/proxy-catdog
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/train.py --config configs/proxy_catdog.yaml --set data.root=data/proxy-catdog
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/evaluate.py --run runs/path-to-proxy-run
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/predict.py --run runs/path-to-proxy-run
+```
+
 For the CIFAR-10 class-imbalance study, `configs/sweeps/imbalance.yaml` compares
 balanced and class-1-at-10% training subsets across seeds and remedy switches.
 Use `train.imbalance_fractions` as a label-to-fraction mapping (unlisted labels

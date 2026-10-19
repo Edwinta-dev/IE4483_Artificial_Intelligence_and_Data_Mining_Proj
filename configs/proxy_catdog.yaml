@@ -1,0 +1,22 @@
+data:
+  root: null
+  image_size: 224
+  classes: [cat, dog]
+model:
+  architecture: resnet18
+  pretrained: true
+  freeze_backbone: true
+  num_classes: 2
+train:
+  batch_size: 4
+  seed: 42
+  epochs: 10
+  learning_rate: 0.001
+  mixed_precision: true
+  gradient_accumulation_steps: 8
+eval:
+  batch_size: 4
+  num_workers: 0
+augment:
+  random_resized_crop: false
+  horizontal_flip: false
