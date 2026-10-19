@@ -16,3 +16,13 @@ train:
 eval:
   batch_size: 32
   num_workers: 0
+augment:
+  random_resized_crop: false
+  random_resized_crop_scale: [0.8, 1.0]
+  horizontal_flip: false
+  rotation_degrees: 0.0
+  color_jitter: false
+  color_jitter_brightness: 0.2
+  color_jitter_contrast: 0.2
+  color_jitter_saturation: 0.2
+  color_jitter_hue: 0.0

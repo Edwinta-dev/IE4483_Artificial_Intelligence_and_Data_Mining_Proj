@@ -44,11 +44,25 @@ class EvalConfig:
 
 
 @dataclasses.dataclass
+class AugmentConfig:
+    random_resized_crop: bool = False
+    random_resized_crop_scale: list[float] = dataclasses.field(default_factory=lambda: [0.8, 1.0])
+    horizontal_flip: bool = False
+    rotation_degrees: float = 0.0
+    color_jitter: bool = False
+    color_jitter_brightness: float = 0.2
+    color_jitter_contrast: float = 0.2
+    color_jitter_saturation: float = 0.2
+    color_jitter_hue: float = 0.0
+
+
+@dataclasses.dataclass
 class Config:
     data: DataConfig = dataclasses.field(default_factory=DataConfig)
     model: ModelConfig = dataclasses.field(default_factory=ModelConfig)
     train: TrainConfig = dataclasses.field(default_factory=TrainConfig)
     eval: EvalConfig = dataclasses.field(default_factory=EvalConfig)
+    augment: AugmentConfig = dataclasses.field(default_factory=AugmentConfig)
 
     @property
     def data_root(self) -> Path:
@@ -66,7 +80,7 @@ def _construct(cls: type[T], values: Any, path: str = "") -> T:
         key = min(unknown)
         raise ValueError(f"unknown configuration key '{path + '.' if path else ''}{key}'")
     kwargs: dict[str, Any] = {}
-    nested = {"data": DataConfig, "model": ModelConfig, "train": TrainConfig, "eval": EvalConfig}
+    nested = {"data": DataConfig, "model": ModelConfig, "train": TrainConfig, "eval": EvalConfig, "augment": AugmentConfig}
     for name, value in values.items():
         if cls is Config:
             kwargs[name] = _construct(nested[name], value, name)
@@ -76,7 +90,7 @@ def _construct(cls: type[T], values: Any, path: str = "") -> T:
                 kwargs[name] = value
                 continue
             origin = getattr(expected, "__origin__", None)
-            valid = (isinstance(value, list) and all(isinstance(item, str) for item in value)) if origin is list else (
+            valid = (isinstance(value, list) and all(isinstance(item, expected.__args__[0]) and not isinstance(item, bool) for item in value)) if origin is list else (
                 isinstance(value, bool) if expected is bool else
                 isinstance(value, int) and not isinstance(value, bool) if expected is int else
                 isinstance(value, (int, float)) and not isinstance(value, bool) if expected is float else

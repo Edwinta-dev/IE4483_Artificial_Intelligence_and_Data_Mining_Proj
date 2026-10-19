@@ -43,6 +43,15 @@ C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/audit_data.py --root data
 C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/audit_data.py --root data --compare raw-data
 ```
 
+Preview the configured training augmentations for a single image. The contact
+sheet is written under `runs/` by default; `--output` can point into a specific
+run folder. Edit the `augment` switches in `configs/base.yaml` to compare
+pipelines, or leave them all disabled to use the evaluation preprocessing.
+
+```powershell
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/preview_augment.py --image path/to/image.jpg --n 8 --output runs/augmentation_preview.png
+```
+
 ## Tests
 
 Run the CPU test suite with:
