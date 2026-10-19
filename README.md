@@ -52,6 +52,18 @@ pipelines, or leave them all disabled to use the evaluation preprocessing.
 C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/preview_augment.py --image path/to/image.jpg --n 8 --output runs/augmentation_preview.png
 ```
 
+Train a configured ResNet transfer-learning run. Each run writes its resolved
+configuration, transform description, file manifest, epoch metrics, and best
+checkpoint under `runs/`. The default batch size is 32 for a frozen ResNet-50
+at 224 pixels on 4 GB VRAM; use batch size 4 when fine tuning the backbone and
+increase gradient accumulation if needed. CUDA uses AMP when enabled; CPU uses
+fp32. Frozen, unaugmented runs reuse pooled features under `runs/feature_cache/`.
+
+```powershell
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/train.py --config configs/base.yaml
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/train.py --config configs/base.yaml --set train.epochs=2 --set model.pretrained=false
+```
+
 ## Tests
 
 Run the CPU test suite with:
