@@ -64,6 +64,14 @@ C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/train.py --config configs
 C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/train.py --config configs/base.yaml --set train.epochs=2 --set model.pretrained=false
 ```
 
+Evaluate a completed run on its labeled validation split. This writes metrics,
+predictions, a confusion matrix, per-class confidence galleries, and
+`results/latest.json` (override its location with `--results`).
+
+```powershell
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/evaluate.py --run runs/path-to-run
+```
+
 ## Tests
 
 Run the CPU test suite with:
