@@ -91,6 +91,13 @@ different artifact folder.
 C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/sweep.py --sweep configs/sweeps/learning_rate.yaml
 ```
 
+Create the architecture diagram (PNG and PDF) and model card from a config.
+Set `--output` to the run folder where these report artifacts should live.
+
+```powershell
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/model_figure.py --config configs/base.yaml --output runs/report
+```
+
 Predict the unlabeled test split using a completed run. The command writes
 `submission.csv` (numeric IDs in ascending order, `1` for dog) and
 `test_predictions.csv` into the run folder. Optional horizontal-flip TTA averages
