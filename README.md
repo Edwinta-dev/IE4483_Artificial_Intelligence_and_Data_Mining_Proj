@@ -72,6 +72,16 @@ predictions, a confusion matrix, per-class confidence galleries, and
 C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/evaluate.py --run runs/path-to-run
 ```
 
+Predict the unlabeled test split using a completed run. The command writes
+`submission.csv` (numeric IDs in ascending order, `1` for dog) and
+`test_predictions.csv` into the run folder. Optional horizontal-flip TTA averages
+the original and flipped image probabilities.
+
+```powershell
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/predict.py --run runs/path-to-run
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/predict.py --run runs/path-to-run --tta flip
+```
+
 ## Tests
 
 Run the CPU test suite with:
