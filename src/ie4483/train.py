@@ -65,10 +65,10 @@ def load_training_config(path: str | Path, overrides: list[str] | None = None) -
     with Path(path).open(encoding="utf-8") as stream:
         raw = yaml.safe_load(stream) or {}
     _apply_overrides(raw, overrides)
-    extra = dict(_EXTRA_DEFAULTS)
-    extra.update(raw.get("train", {}))
     # Validate the established typed configuration using its strict loader.
     typed_fields = {field.name for field in dataclasses.fields(TrainConfig)}
+    extra = dict(_EXTRA_DEFAULTS)
+    extra.update({key: value for key, value in raw.get("train", {}).items() if key not in typed_fields})
     filtered = {**raw, "train": {key: value for key, value in raw.get("train", {}).items() if key in typed_fields}}
     temporary = Path(path).with_name(f".{Path(path).stem}.validated.tmp.yaml")
     try:
@@ -243,7 +243,8 @@ def _fit(model, train_loader, val_loader, cfg, extra, run_dir, device, accumulat
 def train(config: Config, extra: dict[str, Any] | None = None, run_root: str | Path | None = None,
           resume: str | Path | None = None) -> Path:
     extra = {**_EXTRA_DEFAULTS, **(extra or {})}
-    seed_everything(config.train.seed)
+    deterministic = bool(getattr(config.train, "deterministic", True))
+    seed_everything(config.train.seed, deterministic=deterministic)
     run_root = Path(run_root) if run_root else Path("runs")
     name = getattr(config.model, "name", config.model.architecture)
     run_config = {**config_to_dict(config), "train": {**config_to_dict(config)["train"], **extra}}

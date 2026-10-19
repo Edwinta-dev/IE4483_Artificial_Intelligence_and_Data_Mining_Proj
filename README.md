@@ -121,12 +121,24 @@ configuration, transform description, file manifest, epoch metrics, and best
 checkpoint under `runs/`. The default batch size is 32 for a frozen ResNet-50
 at 224 pixels on 4 GB VRAM; use batch size 4 when fine tuning the backbone and
 increase gradient accumulation if needed. CUDA uses AMP when enabled; CPU uses
-fp32. Frozen, unaugmented runs reuse pooled features under `runs/feature_cache/`.
+fp32. Deterministic operations are enabled by default with `train.deterministic`
+in the resolved run config; set it to `false` to disable them. Frozen,
+unaugmented runs reuse pooled features under `runs/feature_cache/`.
 
 ```powershell
 C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/train.py --config configs/base.yaml
 C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/train.py --config configs/base.yaml --set train.epochs=2 --set model.pretrained=false
 C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/train.py --config runs/path-to-run/config.yaml --resume runs/path-to-run
+```
+
+Check repeatability by training twice with the configured seed and once with
+the next seed. The command compares per-epoch loss and accuracy metrics and
+exits nonzero when the same-seed difference exceeds the tolerance (default 0).
+It writes three normal run folders under the selected output path.
+
+```powershell
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/check_repeatable.py --config configs/base.yaml --epochs 2 --set model.pretrained=false
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/check_repeatable.py --config configs/base.yaml --epochs 2 --tolerance 0.000001 --output runs/repeatability-check
 ```
 
 Training writes an atomic `last.pt` checkpoint after each completed epoch. To

@@ -204,3 +204,29 @@ def test_interrupted_training_resumes_with_matching_weights_and_metrics(tmp_path
         assert "configuration differs" in str(error)
     else:
         raise AssertionError("resume accepted a mismatched configuration")
+
+
+def test_repeatability_check_compares_same_seed_and_records_switch(tmp_path, monkeypatch):
+    import yaml
+
+    from scripts.check_repeatable import check_repeatable
+
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    _images(tmp_path, "train")
+    _images(tmp_path, "val")
+    config_file = tmp_path / "repeat.yaml"
+    config_file.write_text(
+        "data:\n  root: '" + str(tmp_path).replace("\\", "/") + "'\n  image_size: 32\n"
+        "model:\n  architecture: resnet18\n  pretrained: false\n  freeze_backbone: true\n"
+        "train:\n  batch_size: 2\n  seed: 19\n  epochs: 1\n  mixed_precision: false\n  deterministic: true\n"
+        "eval:\n  batch_size: 2\n",
+        encoding="utf-8",
+    )
+    same, different = check_repeatable(config_file, 1, tmp_path / "repeat-runs", ['train.feature_cache="off"'])
+    assert same == 0.0
+    assert different > 0.0
+    configs = [yaml.safe_load((tmp_path / "repeat-runs" / f"run-{i}" / next(
+        (tmp_path / "repeat-runs" / f"run-{i}").iterdir()
+    ) / "config.yaml").read_text(encoding="utf-8")) for i in range(3)]
+    assert [item["train"]["seed"] for item in configs] == [19, 19, 20]
+    assert all(item["train"]["deterministic"] is True for item in configs)

@@ -14,6 +14,7 @@ train:
   learning_rate: 0.001
   mixed_precision: true
   gradient_accumulation_steps: 1
+  deterministic: true
 eval:
   batch_size: 32
   num_workers: 0

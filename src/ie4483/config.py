@@ -36,6 +36,7 @@ class TrainConfig:
     learning_rate: float = 0.001
     mixed_precision: bool = True
     gradient_accumulation_steps: int = 1
+    deterministic: bool = True
 
 
 @dataclasses.dataclass
