@@ -15,6 +15,7 @@ import numpy as np
 import torch
 from PIL import Image
 
+from ie4483.cifar import CIFAR10Dataset, cifar_transform
 from ie4483.data import ImageFolderDataset, make_dataloader
 from ie4483.model import build_model
 from ie4483.seed import seed_everything
@@ -33,7 +34,7 @@ def _scores(y_true: list[int], y_pred: list[int], loss: float, classes: list[str
         precision = tp / (tp + fp) if tp + fp else 0.0
         recall = tp / (tp + fn) if tp + fn else 0.0
         f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
-        per_class[name] = {"precision": precision, "recall": recall, "f1": f1}
+        per_class[name] = {"accuracy": recall, "precision": precision, "recall": recall, "f1": f1}
     return {"accuracy": sum(t == p for t, p in zip(y_true, y_pred)) / len(y_true) if y_true else 0.0,
             "per_class": per_class, "loss": loss, "count": len(y_true)}
 
@@ -75,8 +76,10 @@ def _gallery(records: list[dict[str, Any]], kind: str, class_name: str, output: 
     plt.close(fig)
 
 
-def evaluate(run: str | Path, results_path: str | Path = "results/latest.json") -> dict[str, Any]:
-    """Evaluate best.pt against the run's labeled validation split and save artifacts."""
+def evaluate(run: str | Path, results_path: str | Path = "results/latest.json", split: str = "val") -> dict[str, Any]:
+    """Evaluate best.pt against validation, or CIFAR-10's official test split."""
+    if split not in {"val", "test"}:
+        raise ValueError("split must be val or test")
     run_dir = Path(run)
     config, extra = load_training_config(run_dir / "config.yaml")
     seed_everything(config.train.seed)
@@ -85,8 +88,13 @@ def evaluate(run: str | Path, results_path: str | Path = "results/latest.json") 
     checkpoint = torch.load(run_dir / "best.pt", map_location=device, weights_only=False)
     model.load_state_dict(checkpoint["model"])
     model.eval()
-    dataset = ImageFolderDataset(config.data_root, "val", config.data.classes, build_eval_transform(config),
-                                 seed=config.train.seed)
+    if len(config.data.classes) == 10:
+        dataset = CIFAR10Dataset(config.data_root, split, cifar_transform(config.data.image_size), config.train.seed)
+    elif split == "test":
+        raise ValueError("--split test is only supported for CIFAR-10")
+    else:
+        dataset = ImageFolderDataset(config.data_root, "val", config.data.classes, build_eval_transform(config),
+                                     seed=config.train.seed)
     loader = make_dataloader(dataset, config.eval.batch_size, extra["num_workers"])
     truths: list[int] = []
     predictions: list[int] = []
@@ -102,29 +110,33 @@ def evaluate(run: str | Path, results_path: str | Path = "results/latest.json") 
             predictions.extend(probs.argmax(dim=1).tolist())
             probabilities.extend(probs[:, 1].tolist())
     if not truths:
-        raise ValueError("validation split contains no readable images")
+        raise ValueError(f"{split} split contains no readable images")
     classes = list(config.data.classes)
     records = []
-    for (path, truth), pred, p_dog in zip(dataset.samples, predictions, probabilities):
+    samples = dataset.samples if hasattr(dataset, "samples") else [("", int(label)) for label in dataset.labels]
+    for (path, truth), pred, p_dog in zip(samples, predictions, probabilities):
         records.append({"path": str(path), "true": truth, "predicted": pred, "p_dog": p_dog,
                         "true_name": classes[truth], "predicted_name": classes[pred],
                         "confidence": p_dog if pred == 1 else 1 - p_dog})
     metrics = _scores(truths, predictions, loss_sum / len(truths), classes)
-    (run_dir / "val_metrics.json").write_text(json.dumps(metrics, indent=2) + "\n", encoding="utf-8")
-    with (run_dir / "val_predictions.csv").open("w", newline="", encoding="utf-8") as stream:
+    with (run_dir / f"{split}_predictions.csv").open("w", newline="", encoding="utf-8") as stream:
         writer = csv.writer(stream)
         writer.writerow(("path", "true", "predicted", "p_dog"))
         writer.writerows((r["path"], r["true"], r["predicted"], f"{r['p_dog']:.10g}") for r in records)
     matrix = np.zeros((len(classes), len(classes)), dtype=int)
     for truth, pred in zip(truths, predictions):
         matrix[truth, pred] += 1
-    _plot_confusion(matrix, classes, run_dir / "confusion_matrix.png")
-    for name in classes:
-        for kind in ("correct", "wrong", "uncertain"):
-            _gallery(records, kind, name, run_dir / f"gallery_{kind}_{name}.png")
+    metrics["confusion_matrix"] = matrix.tolist()
+    (run_dir / f"{split}_metrics.json").write_text(json.dumps(metrics, indent=2) + "\n", encoding="utf-8")
+    confusion_path = run_dir / ("confusion_matrix.png" if split == "val" else "test_confusion_matrix.png")
+    _plot_confusion(matrix, classes, confusion_path)
+    if split == "val" and hasattr(dataset, "samples"):
+        for name in classes:
+            for kind in ("correct", "wrong", "uncertain"):
+                _gallery(records, kind, name, run_dir / f"gallery_{kind}_{name}.png")
     result_path = Path(results_path)
     result_path.parent.mkdir(parents=True, exist_ok=True)
     result_path.write_text(json.dumps({"metric": "accuracy", "value": metrics["accuracy"],
-                                       "seed": config.train.seed, "split": "val", "notes": run_dir.name},
+                                       "seed": config.train.seed, "split": split, "notes": run_dir.name},
                                       indent=2) + "\n", encoding="utf-8")
     return metrics

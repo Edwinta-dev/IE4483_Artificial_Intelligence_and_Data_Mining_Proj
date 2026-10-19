@@ -16,6 +16,7 @@ import yaml
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
+from ie4483.cifar import CIFAR10Dataset, cifar_transform
 from ie4483.config import Config, TrainConfig, config_to_dict, load_config
 from ie4483.data import ImageFolderDataset, make_dataloader
 from ie4483.features import extract_features, feature_cache_key, load_or_create_cache
@@ -183,21 +184,28 @@ def train(config: Config, extra: dict[str, Any] | None = None, run_root: str | P
     run_dir.mkdir(parents=True, exist_ok=False)
     (run_dir / "config.yaml").write_text(yaml.safe_dump({**config_to_dict(config), "train": {
         **config_to_dict(config)["train"], **extra}}, sort_keys=False), encoding="utf-8")
-    (run_dir / "transforms.txt").write_text(describe_transforms(config), encoding="utf-8")
+    transform_description = (f"CIFAR-10: Resize({config.data.image_size}) -> CIFAR Normalize; train: "
+                             "RandomCrop(padding=4) -> RandomHorizontalFlip" if len(config.data.classes) == 10
+                             else describe_transforms(config))
+    (run_dir / "transforms.txt").write_text(transform_description, encoding="utf-8")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = build_model(config)
     model.to(device)
-    train_transform = build_train_transform(config, config.train.seed)
-    eval_transform = build_eval_transform(config)
     manifest = run_dir / "manifest.csv"
-    train_ds = ImageFolderDataset(config.data_root, "train", config.data.classes, train_transform,
-                                  seed=config.train.seed, manifest_path=manifest)
-    val_ds = ImageFolderDataset(config.data_root, "val", config.data.classes, eval_transform, seed=config.train.seed)
+    if len(config.data.classes) == 10:
+        train_ds = CIFAR10Dataset(config.data_root, "train", cifar_transform(config.data.image_size, True), config.train.seed)
+        val_ds = CIFAR10Dataset(config.data_root, "val", cifar_transform(config.data.image_size), config.train.seed)
+    else:
+        train_transform = build_train_transform(config, config.train.seed)
+        eval_transform = build_eval_transform(config)
+        train_ds = ImageFolderDataset(config.data_root, "train", config.data.classes, train_transform,
+                                      seed=config.train.seed, manifest_path=manifest)
+        val_ds = ImageFolderDataset(config.data_root, "val", config.data.classes, eval_transform, seed=config.train.seed)
     batch = config.train.batch_size
     train_loader = make_dataloader(train_ds, batch, extra["num_workers"], shuffle=True, seed=config.train.seed)
     val_loader = make_dataloader(val_ds, config.eval.batch_size, extra["num_workers"])
     frozen = getattr(model, "freeze_mode", "frozen") == "frozen"
-    augment = any((config.augment.random_resized_crop, config.augment.horizontal_flip,
+    augment = len(config.data.classes) == 10 or any((config.augment.random_resized_crop, config.augment.horizontal_flip,
                    config.augment.rotation_degrees, config.augment.color_jitter))
     cache_mode = extra["feature_cache"]
     if cache_mode not in {"auto", "off"}:

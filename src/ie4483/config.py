@@ -25,6 +25,7 @@ class ModelConfig:
     architecture: str = "resnet18"
     pretrained: bool = True
     freeze_backbone: bool = True
+    num_classes: int = 2
 
 
 @dataclasses.dataclass

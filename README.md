@@ -20,6 +20,24 @@ training images in the corresponding `train/cat` and `train/dog` folders. To
 store the dataset elsewhere, set `IE4483_DATA` or set `data.root` in the YAML
 config. The config value takes precedence over the environment variable.
 
+For the CIFAR-10 extension, the owner can fetch the standard Python batches once
+with `scripts/fetch_cifar10.py`. `configs/cifar10.yaml` uses the ten named
+classes, a 96-pixel input, and CIFAR channel statistics instead of the binary
+cat/dog head and ImageNet normalization. The 32-pixel images are enlarged for
+ResNet-18; training adds a four-pixel padded random crop and horizontal flip.
+The fixed seed carves validation samples from the training batches. Validation
+selects the model; the official labeled test batch is reserved for final
+evaluation:
+
+```powershell
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/fetch_cifar10.py
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/train.py --config configs/cifar10.yaml
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/evaluate.py --run runs/path-to-run --split test
+```
+
+Evaluation writes per-class scores and a ten-by-ten confusion matrix in the
+run folder. No dataset is downloaded by tests.
+
 The owner can cache torchvision's ResNet-18 and ResNet-50 ImageNet weights
 once, and check the local setup, with:
 
