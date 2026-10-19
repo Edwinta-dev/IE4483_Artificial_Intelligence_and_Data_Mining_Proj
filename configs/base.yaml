@@ -7,7 +7,7 @@ model:
   pretrained: true
   freeze_backbone: true
 train:
-  # Batch 32 fits frozen ResNet-50 at 224 on 4 GB VRAM. For fine tuning use 4.
+  # Use scripts/probe_vram.py to measure a safe batch for the target device.
   batch_size: 32
   seed: 42
   epochs: 10

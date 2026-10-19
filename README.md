@@ -102,6 +102,20 @@ pipelines, or leave them all disabled to use the evaluation preprocessing.
 C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/preview_augment.py --image path/to/image.jpg --n 8 --output runs/augmentation_preview.png
 ```
 
+Probe CUDA memory before training to find a safety-adjusted batch for each
+ResNet-18/50 freeze mode. The command uses synthetic batches and local random
+weights, writes `vram_probe.json` under `runs/`, and does not need project data.
+It uses seed 42 by default; pass `--seed` to reproduce a different probe.
+Pass `--config` to use its configured image size; repeat it to update several
+configs with the measured batch for each config's backbone and freeze mode.
+`--write-configs` saves those batch and gradient accumulation values in place.
+The probe reports a message and exits when CUDA is unavailable.
+
+```powershell
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/probe_vram.py --config configs/base.yaml
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/probe_vram.py --config configs/base.yaml --config configs/proxy_catdog.yaml --write-configs
+```
+
 Train a configured ResNet transfer-learning run. Each run writes its resolved
 configuration, transform description, file manifest, epoch metrics, and best
 checkpoint under `runs/`. The default batch size is 32 for a frozen ResNet-50
