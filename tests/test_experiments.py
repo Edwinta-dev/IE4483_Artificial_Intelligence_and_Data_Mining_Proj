@@ -71,15 +71,18 @@ def test_two_by_one_sweep_aggregates_runs_resumes_and_writes_chart(tmp_path, mon
     for values in values_by_cell.values():
         assert f"{statistics.mean(values):.6f} ± {statistics.stdev(values):.6f}" in summary
     assert (output / "sweep.png").is_file()
+    partial_run = Path(rows[0]["run"])
+    (partial_run / "val_metrics.json").unlink()
     again = experiments.sweep(sweep_file, output)
-    assert calls == 4
+    assert calls == 5
+    assert any(Path(row["run"]) == partial_run for row in again)
     assert [(r["train.learning_rate"], r["seed"], r["val_accuracy"]) for r in again] == [
         (r["train.learning_rate"], r["seed"], r["val_accuracy"]) for r in rows
     ]
 
 
 def test_seed_summary_includes_per_seed_mean_and_std(tmp_path, monkeypatch):
-    def fake_run(_config, seed, root, _overrides):
+    def fake_run(_config, seed, root, _overrides, _resume=None):
         run_dir = root / f"run-{seed}"
         run_dir.mkdir(parents=True)
         accuracy = {3: 0.25, 4: 0.75}[seed]

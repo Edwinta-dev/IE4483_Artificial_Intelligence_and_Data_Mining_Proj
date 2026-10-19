@@ -6,11 +6,13 @@ import csv
 import dataclasses
 import logging
 import math
+import random
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import torch
 import yaml
 from torch import nn
@@ -130,7 +132,30 @@ def _fit_head(model, train_data, val_data, cfg, extra, run_dir, device, steps):
                 checkpoint_model=model)
 
 
-def _fit(model, train_loader, val_loader, cfg, extra, run_dir, device, accumulation=None, checkpoint_model=None):
+def _rng_state(loader):
+    return {"python": random.getstate(), "numpy": np.random.get_state(), "torch": torch.get_rng_state(),
+            "cuda": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
+            "loader": loader.generator.get_state() if loader.generator is not None else None}
+
+
+def _restore_rng(state, loader):
+    random.setstate(state["python"])
+    np.random.set_state(state["numpy"])
+    torch.set_rng_state(state["torch"])
+    if state.get("cuda") is not None and torch.cuda.is_available():
+        torch.cuda.set_rng_state_all(state["cuda"])
+    if loader.generator is not None and state.get("loader") is not None:
+        loader.generator.set_state(state["loader"])
+
+
+def _atomic_save(payload, path):
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    torch.save(payload, temporary)
+    temporary.replace(path)
+
+
+def _fit(model, train_loader, val_loader, cfg, extra, run_dir, device, accumulation=None, checkpoint_model=None,
+         resume=False):
     model.to(device)
     accumulation = accumulation or cfg.train.gradient_accumulation_steps
     head_params = list(model.head.parameters())
@@ -160,11 +185,27 @@ def _fit(model, train_loader, val_loader, cfg, extra, run_dir, device, accumulat
     else:
         criterion = nn.CrossEntropyLoss(weight=weight_tensor, label_smoothing=extra["label_smoothing"])
     scaler = torch.amp.GradScaler("cuda", enabled=device.type == "cuda" and cfg.train.mixed_precision)
-    with (run_dir / "metrics.csv").open("w", newline="", encoding="utf-8") as stream:
+    checkpoint_path = run_dir / "last.pt"
+    start_epoch, best_acc, min_val_loss, stale = 1, -1.0, math.inf, 0
+    if resume:
+        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+        model.load_state_dict(checkpoint["training_model"])
+        if checkpoint_model is not None:
+            checkpoint_model.load_state_dict(checkpoint["model"])
+        optimizer.load_state_dict(checkpoint["optimizer"])
+        if scheduler is not None and checkpoint["scheduler"] is not None:
+            scheduler.load_state_dict(checkpoint["scheduler"])
+        scaler.load_state_dict(checkpoint["scaler"])
+        start_epoch = int(checkpoint["epoch"]) + 1
+        best_acc, min_val_loss, stale = checkpoint["best_val_acc"], checkpoint["min_val_loss"], checkpoint["patience"]
+        _restore_rng(checkpoint["rng"], train_loader)
+    metrics_path = run_dir / "metrics.csv"
+    mode = "a" if resume else "w"
+    with metrics_path.open(mode, newline="", encoding="utf-8") as stream:
         writer = csv.writer(stream)
-        writer.writerow(("epoch", "train_loss", "train_acc", "val_loss", "val_acc", "lr", "seconds"))
-        best_acc, min_val_loss, stale = -1.0, math.inf, 0
-        for epoch in range(1, cfg.train.epochs + 1):
+        if not resume:
+            writer.writerow(("epoch", "train_loss", "train_acc", "val_loss", "val_acc", "lr", "seconds"))
+        for epoch in range(start_epoch, cfg.train.epochs + 1):
             if epoch <= extra["warmup_epochs"]:
                 factor = epoch / max(1, extra["warmup_epochs"])
                 base_rates = [cfg.train.learning_rate] + ([extra["backbone_learning_rate"]] if backbone_params else [])
@@ -179,8 +220,8 @@ def _fit(model, train_loader, val_loader, cfg, extra, run_dir, device, accumulat
             if val_acc > best_acc:
                 best_acc = val_acc
                 saved_model = checkpoint_model if checkpoint_model is not None else model
-                torch.save({"model": saved_model.state_dict(), "epoch": epoch, "val_acc": val_acc,
-                            "val_loss": val_loss}, run_dir / "best.pt")
+                _atomic_save({"model": saved_model.state_dict(), "epoch": epoch, "val_acc": val_acc,
+                              "val_loss": val_loss}, run_dir / "best.pt")
             if val_loss < min_val_loss:
                 min_val_loss = val_loss
                 stale = 0
@@ -188,21 +229,35 @@ def _fit(model, train_loader, val_loader, cfg, extra, run_dir, device, accumulat
                 stale += 1
             if scheduler is not None and epoch > extra["warmup_epochs"]:
                 scheduler.step()
+            _atomic_save({"model": (checkpoint_model or model).state_dict(), "training_model": model.state_dict(),
+                          "optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict() if scheduler else None,
+                          "scaler": scaler.state_dict(), "epoch": epoch, "best_val_acc": best_acc,
+                          "min_val_loss": min_val_loss, "patience": stale, "rng": _rng_state(train_loader)},
+                         checkpoint_path)
             if stale > extra["patience"]:
                 LOGGER.info("Early stopping after epoch %d", epoch)
                 break
     return run_dir
 
 
-def train(config: Config, extra: dict[str, Any] | None = None, run_root: str | Path | None = None) -> Path:
+def train(config: Config, extra: dict[str, Any] | None = None, run_root: str | Path | None = None,
+          resume: str | Path | None = None) -> Path:
     extra = {**_EXTRA_DEFAULTS, **(extra or {})}
     seed_everything(config.train.seed)
     run_root = Path(run_root) if run_root else Path("runs")
     name = getattr(config.model, "name", config.model.architecture)
-    run_dir = run_root / f"{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}-{name}"
-    run_dir.mkdir(parents=True, exist_ok=False)
-    (run_dir / "config.yaml").write_text(yaml.safe_dump({**config_to_dict(config), "train": {
-        **config_to_dict(config)["train"], **extra}}, sort_keys=False), encoding="utf-8")
+    run_config = {**config_to_dict(config), "train": {**config_to_dict(config)["train"], **extra}}
+    if resume is not None:
+        run_dir = Path(resume)
+        if not (run_dir / "last.pt").is_file():
+            raise FileNotFoundError(f"no last.pt checkpoint in {run_dir}")
+        saved_config = yaml.safe_load((run_dir / "config.yaml").read_text(encoding="utf-8"))
+        if saved_config != run_config:
+            raise ValueError("resume configuration differs from the saved run configuration")
+    else:
+        run_dir = run_root / f"{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}-{name}"
+        run_dir.mkdir(parents=True, exist_ok=False)
+        (run_dir / "config.yaml").write_text(yaml.safe_dump(run_config, sort_keys=False), encoding="utf-8")
     cifar_train = "RandomCrop(padding=4) -> RandomHorizontalFlip" if extra["cifar_augment"] else "none"
     transform_description = (f"CIFAR-10: Resize({config.data.image_size}) -> CIFAR Normalize; train: {cifar_train}"
                              if len(config.data.classes) == 10 else describe_transforms(config))
@@ -257,7 +312,11 @@ def train(config: Config, extra: dict[str, Any] | None = None, run_root: str | P
             "val": extract_features(model, make_dataloader(val_ds, config.eval.batch_size, extra["num_workers"]), device),
         })
         LOGGER.info("Using %s frozen feature cache at %s", "reused" if reused else "built", cache_path)
-        return _fit_head(model, payload["train"], payload["val"], config, extra, run_dir, device,
-                         config.train.gradient_accumulation_steps)
+        train_data, val_data = payload["train"], payload["val"]
+        train_loader = DataLoader(TensorDataset(*train_data), batch_size=config.train.batch_size, shuffle=True,
+                                  generator=torch.Generator().manual_seed(config.train.seed))
+        val_loader = DataLoader(TensorDataset(*val_data), batch_size=config.eval.batch_size)
+        return _fit(_HeadOnly(model.head), train_loader, val_loader, config, extra, run_dir, device,
+                    config.train.gradient_accumulation_steps, checkpoint_model=model, resume=resume is not None)
     LOGGER.info("Using image training path (cache=%s, frozen=%s, augment=%s)", cache_mode, frozen, augment)
-    return _fit(model, train_loader, val_loader, config, extra, run_dir, device)
+    return _fit(model, train_loader, val_loader, config, extra, run_dir, device, resume=resume is not None)

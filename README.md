@@ -126,7 +126,13 @@ fp32. Frozen, unaugmented runs reuse pooled features under `runs/feature_cache/`
 ```powershell
 C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/train.py --config configs/base.yaml
 C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/train.py --config configs/base.yaml --set train.epochs=2 --set model.pretrained=false
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/train.py --config runs/path-to-run/config.yaml --resume runs/path-to-run
 ```
+
+Training writes an atomic `last.pt` checkpoint after each completed epoch. To
+continue an interrupted run, pass its folder with `--resume`; the supplied
+configuration and overrides must match the saved run configuration. Seed and
+sweep runners also continue an unfinished run folder when it has `last.pt`.
 
 Evaluate a completed run on its labeled validation split. This writes metrics,
 predictions, a confusion matrix, per-class confidence galleries, and

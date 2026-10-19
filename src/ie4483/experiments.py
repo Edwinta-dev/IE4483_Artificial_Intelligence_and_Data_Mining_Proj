@@ -25,10 +25,11 @@ def _override(key: str, value: Any) -> str:
     return f"{key}={yaml.safe_dump(value, default_flow_style=True).strip()}"
 
 
-def _run_one(config_path: str | Path, seed: int, run_root: Path, overrides: list[str]) -> tuple[Path, float]:
+def _run_one(config_path: str | Path, seed: int, run_root: Path, overrides: list[str],
+             resume_dir: Path | None = None) -> tuple[Path, float]:
     all_overrides = [*overrides, f"train.seed={seed}"]
     config, extra = load_training_config(config_path, all_overrides)
-    run_dir = train(config, extra, run_root)
+    run_dir = train(config, extra, run_root, resume=resume_dir)
     metrics = evaluate(run_dir, run_dir / "latest.json")
     return run_dir, float(metrics["accuracy"])
 
@@ -91,7 +92,9 @@ def run_seeds(config_path: str | Path, seeds: list[int], output: str | Path,
     output = Path(output)
     rows = []
     for seed in seeds:
-        run_dir, accuracy = _run_one(config_path, seed, output / f"seed_{seed}", overrides or [])
+        seed_root = output / f"seed_{seed}"
+        partial = _partial_run(seed_root)
+        run_dir, accuracy = _run_one(config_path, seed, seed_root, overrides or [], partial)
         rows.append({"seed": seed, "run": str(run_dir), "val_accuracy": accuracy})
     _write_summary(rows, output)
     return rows
@@ -101,6 +104,11 @@ def _cell_name(values: tuple[Any, ...]) -> str:
     parts = [re.sub(r"[^A-Za-z0-9_.-]+", "-", str(value)).strip("-") or "empty" for value in values]
     identity = hashlib.sha256(json.dumps(values, sort_keys=True).encode("utf-8")).hexdigest()[:10]
     return "__".join([*parts, identity])
+
+
+def _partial_run(seed_dir: Path) -> Path | None:
+    runs = sorted(path for path in seed_dir.glob("*") if path.is_dir() and (path / "last.pt").is_file())
+    return runs[-1] if runs else None
 
 
 def sweep(sweep_path: str | Path, output: str | Path | None = None) -> list[dict[str, Any]]:
@@ -137,7 +145,8 @@ def sweep(sweep_path: str | Path, output: str | Path | None = None) -> list[dict
                 accuracy = float(metrics["accuracy"])
             else:
                 overrides = [*shared_overrides, *(_override(key, value) for key, value in cell.items())]
-                run_dir, accuracy = _run_one(config_path, int(seed), seed_dir, overrides)
+                run_dir, accuracy = _run_one(config_path, int(seed), seed_dir, overrides,
+                                             _partial_run(seed_dir))
             rows.append({**cell, "seed": seed, "run": str(run_dir), "val_accuracy": accuracy})
         _write_summary(rows, output, dimensions)
     # Sort cells by average validation accuracy; ties retain their declared grid order.

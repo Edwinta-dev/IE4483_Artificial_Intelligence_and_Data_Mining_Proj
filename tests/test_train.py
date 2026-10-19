@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 from types import SimpleNamespace
 
+import pytest
 import torch
 from PIL import Image
 
@@ -144,3 +145,62 @@ def test_weighted_sampler_and_class_weights_work_on_image_folders(tmp_path, monk
     extra = {"feature_cache": "off", "weighted_sampler": True, "class_weighted": True}
     run = train(load_config(config_file), extra, tmp_path / "runs")
     assert (run / "best.pt").is_file()
+
+
+def test_interrupted_training_resumes_with_matching_weights_and_metrics(tmp_path, monkeypatch):
+    import ie4483.train as training
+
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    _images(tmp_path, "train")
+    _images(tmp_path, "val")
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(
+        "data:\n  root: '" + str(tmp_path).replace("\\", "/") + "'\n  image_size: 32\n"
+        "model:\n  architecture: resnet18\n  pretrained: false\n  freeze_backbone: true\n"
+        "train:\n  batch_size: 2\n  seed: 17\n  epochs: 3\n  learning_rate: 0.001\n  mixed_precision: false\n  gradient_accumulation_steps: 1\n"
+        "eval:\n  batch_size: 2\n",
+        encoding="utf-8",
+    )
+    config = load_config(config_file)
+    extra = {"feature_cache": "off", "patience": 10}
+    straight = train(config, extra, tmp_path / "straight")
+
+    original_save = training._atomic_save
+    last_saves = 0
+
+    def stop_after_epoch_one(payload, path):
+        nonlocal last_saves
+        original_save(payload, path)
+        if path.name == "last.pt":
+            last_saves += 1
+            if last_saves == 1:
+                raise RuntimeError("simulated interruption")
+
+    monkeypatch.setattr(training, "_atomic_save", stop_after_epoch_one)
+    try:
+        train(config, extra, tmp_path / "interrupted")
+    except RuntimeError as error:
+        assert str(error) == "simulated interruption"
+    else:
+        raise AssertionError("training did not stop at the simulated interruption")
+    partial = next((tmp_path / "interrupted").iterdir())
+    monkeypatch.setattr(training, "_atomic_save", original_save)
+    resumed = train(config, extra, tmp_path / "interrupted", resume=partial)
+
+    straight_rows = list(csv.DictReader((straight / "metrics.csv").open(encoding="utf-8")))
+    resumed_rows = list(csv.DictReader((resumed / "metrics.csv").open(encoding="utf-8")))
+    assert [row["epoch"] for row in resumed_rows] == ["1", "2", "3"]
+    for expected, actual in zip(straight_rows, resumed_rows):
+        for key in ("train_loss", "train_acc", "val_loss", "val_acc", "lr"):
+            assert float(actual[key]) == pytest.approx(float(expected[key]), abs=1e-7)
+    torch.testing.assert_close(torch.load(straight / "best.pt", weights_only=False)["model"],
+                               torch.load(resumed / "best.pt", weights_only=False)["model"], rtol=1e-6, atol=1e-7)
+
+    changed = load_config(config_file)
+    changed.train.learning_rate *= 2
+    try:
+        train(changed, extra, tmp_path / "interrupted", resume=partial)
+    except ValueError as error:
+        assert "configuration differs" in str(error)
+    else:
+        raise AssertionError("resume accepted a mismatched configuration")
