@@ -1,0 +1,4 @@
+config: configs/base.yaml
+seeds: [0, 1, 2]
+parameters:
+  augment.horizontal_flip: [false, true]

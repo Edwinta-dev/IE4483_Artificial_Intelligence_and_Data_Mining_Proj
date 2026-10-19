@@ -72,6 +72,25 @@ predictions, a confusion matrix, per-class confidence galleries, and
 C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/evaluate.py --run runs/path-to-run
 ```
 
+Repeat a training and validation run across fixed seeds. The command writes
+per-seed results plus `summary.csv` and `summary.md` under the output folder.
+Use `--set KEY=VALUE` to apply normal training config overrides.
+
+```powershell
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/run_seeds.py --config configs/base.yaml --seeds 0 1 2
+```
+
+Run a parameter grid from `configs/sweeps/`. Each parameter combination gets
+the listed seeds, and completed seed runs with `val_metrics.json` are reused.
+The output contains sorted summary tables and `sweep.png` with standard
+deviation error bars. Optional shared `overrides: [train.batch_size=4]` entries
+in the sweep YAML apply fixed config values to every cell. `--output` selects a
+different artifact folder.
+
+```powershell
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/sweep.py --sweep configs/sweeps/learning_rate.yaml
+```
+
 Predict the unlabeled test split using a completed run. The command writes
 `submission.csv` (numeric IDs in ascending order, `1` for dog) and
 `test_predictions.csv` into the run folder. Optional horizontal-flip TTA averages
