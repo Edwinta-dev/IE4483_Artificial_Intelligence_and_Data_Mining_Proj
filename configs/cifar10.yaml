@@ -14,6 +14,10 @@ train:
   learning_rate: 0.001
   mixed_precision: true
   gradient_accumulation_steps: 1
+  imbalance_fractions: null
+  class_weighted: false
+  weighted_sampler: false
+  focal_gamma: null
 eval:
   batch_size: 64
   num_workers: 0

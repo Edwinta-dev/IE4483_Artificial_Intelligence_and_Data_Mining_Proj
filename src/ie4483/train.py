@@ -20,6 +20,13 @@ from ie4483.cifar import CIFAR10Dataset, cifar_transform
 from ie4483.config import Config, TrainConfig, config_to_dict, load_config
 from ie4483.data import ImageFolderDataset, make_dataloader
 from ie4483.features import extract_features, feature_cache_key, load_or_create_cache
+from ie4483.imbalance import (
+    FocalLoss,
+    balanced_sampler,
+    class_weights,
+    imbalanced_subset,
+    write_class_counts,
+)
 from ie4483.model import build_model
 from ie4483.seed import seed_everything
 from ie4483.transforms import (
@@ -35,6 +42,8 @@ _EXTRA_DEFAULTS = {
     "gamma": 0.1, "warmup_epochs": 0, "patience": 3,
     "label_smoothing": 0.0, "class_weights": None, "num_workers": 0,
     "feature_cache": "auto",
+    "imbalance_fractions": None, "class_weighted": False, "weighted_sampler": False,
+    "focal_gamma": None,
 }
 
 
@@ -138,8 +147,11 @@ def _fit(model, train_loader, val_loader, cfg, extra, run_dir, device, accumulat
     else:
         raise ValueError("train.scheduler must be cosine, step, or none")
     weight = extra["class_weights"]
-    criterion = nn.CrossEntropyLoss(weight=torch.tensor(weight, dtype=torch.float, device=device) if weight else None,
-                                    label_smoothing=extra["label_smoothing"])
+    weight_tensor = torch.tensor(weight, dtype=torch.float, device=device) if weight else None
+    if extra.get("focal_gamma") is not None:
+        criterion = FocalLoss(float(extra["focal_gamma"]), weight_tensor, extra["label_smoothing"])
+    else:
+        criterion = nn.CrossEntropyLoss(weight=weight_tensor, label_smoothing=extra["label_smoothing"])
     scaler = torch.amp.GradScaler("cuda", enabled=device.type == "cuda" and cfg.train.mixed_precision)
     with (run_dir / "metrics.csv").open("w", newline="", encoding="utf-8") as stream:
         writer = csv.writer(stream)
@@ -195,6 +207,12 @@ def train(config: Config, extra: dict[str, Any] | None = None, run_root: str | P
     if len(config.data.classes) == 10:
         train_ds = CIFAR10Dataset(config.data_root, "train", cifar_transform(config.data.image_size, True), config.train.seed)
         val_ds = CIFAR10Dataset(config.data_root, "val", cifar_transform(config.data.image_size), config.train.seed)
+        if extra["imbalance_fractions"]:
+            train_ds, counts = imbalanced_subset(train_ds, extra["imbalance_fractions"], config.train.seed)
+        else:
+            counts = {int(label): int((train_ds.labels == label).sum()) for label in range(len(config.data.classes))}
+        write_class_counts(run_dir / "class_counts.json",
+                           {config.data.classes[label]: count for label, count in counts.items()})
     else:
         train_transform = build_train_transform(config, config.train.seed)
         eval_transform = build_eval_transform(config)
@@ -202,7 +220,17 @@ def train(config: Config, extra: dict[str, Any] | None = None, run_root: str | P
                                       seed=config.train.seed, manifest_path=manifest)
         val_ds = ImageFolderDataset(config.data_root, "val", config.data.classes, eval_transform, seed=config.train.seed)
     batch = config.train.batch_size
-    train_loader = make_dataloader(train_ds, batch, extra["num_workers"], shuffle=True, seed=config.train.seed)
+    sampler = None
+    if extra["weighted_sampler"]:
+        labels = train_ds.dataset.labels[train_ds.indices] if isinstance(train_ds, torch.utils.data.Subset) else train_ds.labels
+        sampler = balanced_sampler(labels, config.train.seed)
+    train_loader = (DataLoader(train_ds, batch_size=batch, sampler=sampler, num_workers=extra["num_workers"])
+                    if sampler is not None else make_dataloader(train_ds, batch, extra["num_workers"],
+                                                                shuffle=True, seed=config.train.seed))
+    if extra["class_weighted"]:
+        labels = train_ds.dataset.labels[train_ds.indices] if isinstance(train_ds, torch.utils.data.Subset) else train_ds.labels
+        weights = class_weights(labels, len(config.data.classes)).tolist()
+        extra["class_weights"] = weights
     val_loader = make_dataloader(val_ds, config.eval.batch_size, extra["num_workers"])
     frozen = getattr(model, "freeze_mode", "frozen") == "frozen"
     augment = len(config.data.classes) == 10 or any((config.augment.random_resized_crop, config.augment.horizontal_flip,

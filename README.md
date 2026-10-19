@@ -36,7 +36,20 @@ C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/evaluate.py --run runs/pa
 ```
 
 Evaluation writes per-class scores and a ten-by-ten confusion matrix in the
-run folder. No dataset is downloaded by tests.
+run folder, including macro-F1 and macro recall. No dataset is downloaded by tests.
+
+For the CIFAR-10 class-imbalance study, `configs/sweeps/imbalance.yaml` compares
+balanced and class-1-at-10% training subsets across seeds and remedy switches.
+Use `train.imbalance_fractions` as a label-to-fraction mapping (unlisted labels
+stay complete), `train.class_weighted` for normalized inverse-frequency
+cross-entropy weights, `train.weighted_sampler` for balanced sampling, and
+`train.focal_gamma` to enable focal loss. These switches can be combined. Each
+run records its selected training counts in `class_counts.json`; validation and
+test sets are unchanged. Run it with:
+
+```powershell
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/sweep.py --sweep configs/sweeps/imbalance.yaml
+```
 
 The owner can cache torchvision's ResNet-18 and ResNet-50 ImageNet weights
 once, and check the local setup, with:

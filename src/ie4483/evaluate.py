@@ -35,7 +35,10 @@ def _scores(y_true: list[int], y_pred: list[int], loss: float, classes: list[str
         recall = tp / (tp + fn) if tp + fn else 0.0
         f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
         per_class[name] = {"accuracy": recall, "precision": precision, "recall": recall, "f1": f1}
+    macro_f1 = sum(values["f1"] for values in per_class.values()) / len(classes) if classes else 0.0
+    macro_recall = sum(values["recall"] for values in per_class.values()) / len(classes) if classes else 0.0
     return {"accuracy": sum(t == p for t, p in zip(y_true, y_pred)) / len(y_true) if y_true else 0.0,
+            "macro_f1": macro_f1, "macro_recall": macro_recall,
             "per_class": per_class, "loss": loss, "count": len(y_true)}
 
 
