@@ -18,6 +18,7 @@ train:
   class_weighted: false
   weighted_sampler: false
   focal_gamma: null
+  cifar_augment: true  # false allows the frozen-backbone feature cache
 eval:
   batch_size: 64
   num_workers: 0

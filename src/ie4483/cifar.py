@@ -61,8 +61,16 @@ class CIFAR10Dataset(Dataset):
                 val_parts.extend(class_indices[:n_val])
                 train_parts.extend(class_indices[n_val:])
             indices = np.array(train_parts if split == "train" else val_parts, dtype=np.int64)
+        self.split = split
+        self.source_indices = indices
         self.images = images[indices]
         self.labels = labels[indices]
+
+    @property
+    def samples(self) -> list[tuple[str, int]]:
+        """Stable per-image identities for feature-cache keys."""
+        return [(f"cifar10/{'test' if self.split == 'test' else 'train'}/{int(i)}", int(label))
+                for i, label in zip(self.source_indices, self.labels)]
 
     def __len__(self) -> int:
         return len(self.labels)

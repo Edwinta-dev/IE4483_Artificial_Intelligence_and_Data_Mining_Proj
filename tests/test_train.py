@@ -127,3 +127,20 @@ def test_patience_zero_stops_on_first_validation_loss_regression(tmp_path, monke
                   tmp_path, torch.device("cpu"))
     rows = list(csv.DictReader((tmp_path / "metrics.csv").open(encoding="utf-8")))
     assert len(rows) == 2
+
+
+def test_weighted_sampler_and_class_weights_work_on_image_folders(tmp_path, monkeypatch):
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    _images(tmp_path, "train")
+    _images(tmp_path, "val")
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(
+        "data:\n  root: '" + str(tmp_path).replace("\\", "/") + "'\n  image_size: 32\n"
+        "model:\n  architecture: resnet18\n  pretrained: false\n  freeze_backbone: true\n"
+        "train:\n  batch_size: 2\n  seed: 9\n  epochs: 1\n  mixed_precision: false\n"
+        "eval:\n  batch_size: 2\n",
+        encoding="utf-8",
+    )
+    extra = {"feature_cache": "off", "weighted_sampler": True, "class_weighted": True}
+    run = train(load_config(config_file), extra, tmp_path / "runs")
+    assert (run / "best.pt").is_file()

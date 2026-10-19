@@ -43,7 +43,7 @@ _EXTRA_DEFAULTS = {
     "label_smoothing": 0.0, "class_weights": None, "num_workers": 0,
     "feature_cache": "auto",
     "imbalance_fractions": None, "class_weighted": False, "weighted_sampler": False,
-    "focal_gamma": None,
+    "focal_gamma": None, "cifar_augment": True,
 }
 
 
@@ -79,6 +79,13 @@ def load_training_config(path: str | Path, overrides: list[str] | None = None) -
 
 def _metric(output: torch.Tensor, target: torch.Tensor) -> tuple[float, int]:
     return float(nn.functional.cross_entropy(output.float(), target).item()), int((output.argmax(1) == target).sum())
+
+
+def _manifest(dataset) -> list[tuple[str, int]]:
+    if isinstance(dataset, torch.utils.data.Subset):
+        base = _manifest(dataset.dataset)
+        return [base[int(index)] for index in dataset.indices]
+    return [(str(path), int(label)) for path, label in dataset.samples]
 
 
 def _epoch(model, loader, criterion, optimizer, device, scaler, accumulation, train: bool) -> tuple[float, float]:
@@ -196,16 +203,17 @@ def train(config: Config, extra: dict[str, Any] | None = None, run_root: str | P
     run_dir.mkdir(parents=True, exist_ok=False)
     (run_dir / "config.yaml").write_text(yaml.safe_dump({**config_to_dict(config), "train": {
         **config_to_dict(config)["train"], **extra}}, sort_keys=False), encoding="utf-8")
-    transform_description = (f"CIFAR-10: Resize({config.data.image_size}) -> CIFAR Normalize; train: "
-                             "RandomCrop(padding=4) -> RandomHorizontalFlip" if len(config.data.classes) == 10
-                             else describe_transforms(config))
+    cifar_train = "RandomCrop(padding=4) -> RandomHorizontalFlip" if extra["cifar_augment"] else "none"
+    transform_description = (f"CIFAR-10: Resize({config.data.image_size}) -> CIFAR Normalize; train: {cifar_train}"
+                             if len(config.data.classes) == 10 else describe_transforms(config))
     (run_dir / "transforms.txt").write_text(transform_description, encoding="utf-8")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = build_model(config)
     model.to(device)
     manifest = run_dir / "manifest.csv"
     if len(config.data.classes) == 10:
-        train_ds = CIFAR10Dataset(config.data_root, "train", cifar_transform(config.data.image_size, True), config.train.seed)
+        train_ds = CIFAR10Dataset(config.data_root, "train", cifar_transform(config.data.image_size, bool(extra["cifar_augment"])),
+                                 config.train.seed)
         val_ds = CIFAR10Dataset(config.data_root, "val", cifar_transform(config.data.image_size), config.train.seed)
         if extra["imbalance_fractions"]:
             train_ds, counts = imbalanced_subset(train_ds, extra["imbalance_fractions"], config.train.seed)
@@ -233,13 +241,14 @@ def train(config: Config, extra: dict[str, Any] | None = None, run_root: str | P
         extra["class_weights"] = weights
     val_loader = make_dataloader(val_ds, config.eval.batch_size, extra["num_workers"])
     frozen = getattr(model, "freeze_mode", "frozen") == "frozen"
-    augment = len(config.data.classes) == 10 or any((config.augment.random_resized_crop, config.augment.horizontal_flip,
+    is_cifar = len(config.data.classes) == 10
+    augment = bool(extra["cifar_augment"]) if is_cifar else any((config.augment.random_resized_crop, config.augment.horizontal_flip,
                    config.augment.rotation_degrees, config.augment.color_jitter))
     cache_mode = extra["feature_cache"]
     if cache_mode not in {"auto", "off"}:
         raise ValueError("train.feature_cache must be auto or off")
     if cache_mode == "auto" and frozen and not augment:
-        manifest_values = [(str(path), label) for ds in (train_ds, val_ds) for path, label in ds.samples]
+        manifest_values = [entry for ds in (train_ds, val_ds) for entry in _manifest(ds)]
         key = feature_cache_key({"model": dataclasses.asdict(config.model), "data": dataclasses.asdict(config.data)}, manifest_values)
         cache_dir = run_root / "feature_cache"
         cache_path = cache_dir / f"{key}.pt"

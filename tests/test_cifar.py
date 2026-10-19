@@ -57,3 +57,40 @@ def test_cifar_one_epoch_cpu_and_test_evaluation(tmp_path, monkeypatch):
     assert (run / "test_confusion_matrix.png").is_file()
     assert (run / "test_metrics.json").is_file()
     assert '"split": "test"' in result_path.read_text(encoding="utf-8")
+
+
+def _cifar_config(tmp_path):
+    config_path = tmp_path / "cifar.yaml"
+    config_path.write_text(
+        "data:\n  root: '" + str(tmp_path).replace("\\", "/") + "'\n  image_size: 32\n"
+        "  classes: [airplane, automobile, bird, cat, deer, dog, frog, horse, ship, truck]\n"
+        "model:\n  architecture: resnet18\n  pretrained: false\n  freeze_backbone: true\n  num_classes: 10\n"
+        "train:\n  seed: 7\n  epochs: 1\n  batch_size: 10\n  mixed_precision: false\n"
+        "eval:\n  batch_size: 10\n", encoding="utf-8")
+    return load_training_config(config_path)
+
+
+def test_frozen_cifar_without_augmentation_uses_feature_cache(tmp_path, monkeypatch):
+    import ie4483.train as training
+
+    monkeypatch.setattr("torch.cuda.is_available", lambda: False)
+    _make_cifar(tmp_path)
+    calls = []
+    original = training.extract_features
+    monkeypatch.setattr(training, "extract_features", lambda *a: calls.append(1) or original(*a))
+    config, extra = _cifar_config(tmp_path)
+    extra.update(cifar_augment=False, imbalance_fractions={0: 0.5})
+    train(config, dict(extra), tmp_path / "runs")
+    train(config, dict(extra), tmp_path / "runs")
+    assert len(calls) == 2  # train + val built once, reused on the second run
+    assert len(list((tmp_path / "runs" / "feature_cache").glob("*.pt"))) == 1
+
+
+def test_cifar_cache_identities_are_stable_and_split_specific(tmp_path):
+    _make_cifar(tmp_path)
+    train_ids = [path for path, _ in CIFAR10Dataset(tmp_path, "train", seed=5).samples]
+    val_ids = [path for path, _ in CIFAR10Dataset(tmp_path, "val", seed=5).samples]
+    test_ids = [path for path, _ in CIFAR10Dataset(tmp_path, "test").samples]
+    assert train_ids == [path for path, _ in CIFAR10Dataset(tmp_path, "train", seed=5).samples]
+    assert not set(train_ids) & set(val_ids)
+    assert not set(test_ids) & set(train_ids + val_ids)

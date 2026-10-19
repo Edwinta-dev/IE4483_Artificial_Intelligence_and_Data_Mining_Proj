@@ -81,6 +81,11 @@ class ImageFolderDataset(Dataset):
             for image_path, label in self.samples:
                 writer.writerow((self.split, self.classes[label], str(image_path)))
 
+    @property
+    def labels(self) -> np.ndarray:
+        """Integer labels in sample order, as used by samplers and class weights."""
+        return np.array([label for _, label in self.samples], dtype=np.int64)
+
     def __len__(self) -> int:
         return len(self.samples)
 
