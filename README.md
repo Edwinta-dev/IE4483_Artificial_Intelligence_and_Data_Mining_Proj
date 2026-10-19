@@ -180,6 +180,15 @@ Set `--output` to the run folder where these report artifacts should live.
 C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/model_figure.py --config configs/base.yaml --output runs/report
 ```
 
+Create per-run loss and accuracy curves, an overlay of validation accuracy, and
+CSV/Markdown comparison tables from completed run folders. Each run folder gets
+its own `training_curves.png` and `.pdf`; all combined artifacts go to `--out`.
+Proxy data runs are marked `PROXY` in the figures and table.
+
+```powershell
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/report_figures.py --runs runs/run-a runs/run-b --out runs/report
+```
+
 Predict the unlabeled test split using a completed run. The command writes
 `submission.csv` (numeric IDs in ascending order, `1` for dog) and
 `test_predictions.csv` into the run folder. Optional horizontal-flip TTA averages

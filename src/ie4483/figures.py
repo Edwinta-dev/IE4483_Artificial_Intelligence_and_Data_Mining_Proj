@@ -14,6 +14,56 @@ from torch import nn
 from ie4483.model import model_summary
 
 
+def _save_report_figure(fig: Any, stem: str, output_dir: str | Path) -> tuple[Path, Path]:
+    """Save a report chart as PNG and PDF using the project chart style."""
+    output = Path(output_dir)
+    output.mkdir(parents=True, exist_ok=True)
+    paths = (output / f"{stem}.png", output / f"{stem}.pdf")
+    fig.tight_layout()
+    for path in paths:
+        fig.savefig(path, dpi=180, bbox_inches="tight")
+    plt.close(fig)
+    return paths
+
+
+def training_curves(metrics: list[dict[str, str]], title: str, output_dir: str | Path,
+                    stem: str = "training_curves") -> tuple[Path, Path]:
+    """Draw train/validation loss and accuracy and mark the best validation epoch."""
+    if not metrics:
+        raise ValueError("metrics must contain at least one epoch")
+    epochs = [int(row["epoch"]) for row in metrics]
+    best_index = max(range(len(metrics)), key=lambda index: float(metrics[index]["val_acc"]))
+    best_epoch = epochs[best_index]
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4))
+    axes[0].plot(epochs, [float(row["train_loss"]) for row in metrics], marker="o", label="Train")
+    axes[0].plot(epochs, [float(row["val_loss"]) for row in metrics], marker="o", label="Validation")
+    axes[0].set(xlabel="Epoch", ylabel="Loss", title="Loss")
+    axes[1].plot(epochs, [float(row["train_acc"]) for row in metrics], marker="o", label="Train")
+    axes[1].plot(epochs, [float(row["val_acc"]) for row in metrics], marker="o", label="Validation")
+    axes[1].set(xlabel="Epoch", ylabel="Accuracy", title="Accuracy")
+    for axis in axes:
+        axis.axvline(best_epoch, color="#d62728", linestyle="--", label=f"Best epoch {best_epoch}")
+        axis.legend()
+        axis.grid(alpha=0.25)
+    fig.suptitle(title)
+    return _save_report_figure(fig, stem, output_dir)
+
+
+def comparison_figure(runs: list[dict[str, Any]], output_dir: str | Path) -> tuple[Path, Path]:
+    """Overlay validation accuracy curves for the supplied run summaries."""
+    fig, axis = plt.subplots(figsize=(8, 5))
+    for run in runs:
+        label = str(run["run"])
+        if run.get("proxy"):
+            label += " (PROXY)"
+        axis.plot(run["epochs"], run["val_accuracy_curve"], marker="o", label=label)
+    axis.set(xlabel="Epoch", ylabel="Validation accuracy", title="Run comparison")
+    axis.grid(alpha=0.25)
+    if runs:
+        axis.legend()
+    return _save_report_figure(fig, "comparison", output_dir)
+
+
 def _module_name(module: nn.Module) -> str:
     if isinstance(module, nn.Linear):
         return f"Linear {module.in_features} → {module.out_features}"
