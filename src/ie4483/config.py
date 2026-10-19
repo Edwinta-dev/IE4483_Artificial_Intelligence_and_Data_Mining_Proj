@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import dataclasses
-import os
 from pathlib import Path
 from typing import Any, TypeVar, get_type_hints
 
 import yaml
+
+from ie4483.paths import resolve_data_root
 
 T = TypeVar("T")
 
@@ -52,8 +53,7 @@ class Config:
     @property
     def data_root(self) -> Path:
         """Resolved data directory using config, environment, then default."""
-        root = self.data.root or os.environ.get("IE4483_DATA") or "data"
-        return Path(root).expanduser()
+        return resolve_data_root(self.data.root)
 
 
 def _construct(cls: type[T], values: Any, path: str = "") -> T:
