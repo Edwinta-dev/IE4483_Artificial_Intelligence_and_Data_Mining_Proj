@@ -1,0 +1,4 @@
+config: configs/base.yaml
+seeds: [0, 1, 2]
+parameters:
+  data.root: [raw-data, data]

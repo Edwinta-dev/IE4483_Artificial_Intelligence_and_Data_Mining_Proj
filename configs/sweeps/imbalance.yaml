@@ -1,0 +1,8 @@
+config: configs/cifar10.yaml
+seeds: [0, 1, 2]
+overrides: [train.epochs=10]
+parameters:
+  train.imbalance_fractions: [null, {"1": 0.1}]
+  train.class_weighted: [false, true]
+  train.weighted_sampler: [false, true]
+  train.focal_gamma: [null, 2.0]

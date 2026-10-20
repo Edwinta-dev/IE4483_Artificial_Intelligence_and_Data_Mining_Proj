@@ -1,0 +1,6 @@
+config: configs/base.yaml
+seeds: [0, 1, 2]
+overrides: [train.batch_size=4]
+parameters:
+  model.architecture: [resnet18, resnet50]
+  model.freeze_backbone: [true, false]

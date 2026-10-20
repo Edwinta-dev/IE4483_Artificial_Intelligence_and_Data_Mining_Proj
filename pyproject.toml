@@ -1,0 +1,17 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ie4483"
+version = "0.1.0"
+description = "IE4483 image classification project"
+requires-python = ">=3.10"
+dependencies = ["numpy", "torch", "PyYAML"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ie4483"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
