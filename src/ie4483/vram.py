@@ -43,6 +43,18 @@ def write_probe_json(
     return destination
 
 
+def check_fits_device(peak_bytes: int, total_bytes: int) -> int:
+    """Raise OOM when a step's peak exceeds physical VRAM; return ``peak_bytes``.
+
+    On Windows the driver can spill allocations into shared system memory, so
+    a step may "succeed" with a peak larger than the card. Treat that as OOM.
+    """
+    if peak_bytes > total_bytes:
+        raise torch.cuda.OutOfMemoryError(
+            f"peak {peak_bytes} bytes exceeds device memory {total_bytes} bytes (shared-memory spill)")
+    return peak_bytes
+
+
 def find_max_batch(
     step_fn: Callable[[int], object],
     start: int,

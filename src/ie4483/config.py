@@ -12,6 +12,8 @@ from ie4483.paths import resolve_data_root
 
 T = TypeVar("T")
 
+FREEZE_MODES = ("frozen", "last_block", "full")
+
 
 @dataclasses.dataclass
 class DataConfig:
@@ -25,6 +27,8 @@ class ModelConfig:
     architecture: str = "resnet18"
     pretrained: bool = True
     freeze_backbone: bool = True
+    # Overrides freeze_backbone when set: "frozen", "last_block", or "full".
+    freeze_mode: str | None = None
     num_classes: int = 2
 
 
@@ -88,7 +92,7 @@ def _construct(cls: type[T], values: Any, path: str = "") -> T:
             kwargs[name] = _construct(nested[name], value, name)
         else:
             expected = hints[name]
-            if name == "root" and value is None:
+            if name in {"root", "freeze_mode"} and value is None:
                 kwargs[name] = value
                 continue
             origin = getattr(expected, "__origin__", None)
@@ -100,6 +104,8 @@ def _construct(cls: type[T], values: Any, path: str = "") -> T:
             )
             if not valid:
                 raise ValueError(f"invalid type for '{path}.{name}'")
+            if name == "freeze_mode" and value not in FREEZE_MODES:
+                raise ValueError(f"'{path}.freeze_mode' must be one of {', '.join(FREEZE_MODES)}")
             kwargs[name] = float(value) if expected is float else value
     return cls(**kwargs)
 

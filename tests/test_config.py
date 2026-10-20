@@ -44,3 +44,19 @@ def test_data_root_uses_config_then_environment(tmp_path, monkeypatch):
     config_file = tmp_path / "configured.yaml"
     config_file.write_text(f"data:\n  root: '{configured}'\n", encoding="utf-8")
     assert load_config(config_file).data_root == configured
+
+
+def test_model_freeze_mode_accepted_and_validated(tmp_path) -> None:
+    import pytest as _pytest
+
+    from ie4483.config import load_config
+    from ie4483.model import build_model
+
+    path = tmp_path / "c.yaml"
+    path.write_text("model:\n  pretrained: false\n  freeze_mode: last_block\n", encoding="utf-8")
+    config = load_config(path)
+    assert config.model.freeze_mode == "last_block"
+    assert build_model(config).freeze_mode == "last_block"
+    assert load_config(path, ["model.freeze_mode=null"]).model.freeze_mode is None
+    with _pytest.raises(ValueError, match="freeze_mode"):
+        load_config(path, ["model.freeze_mode=partial"])

@@ -46,3 +46,19 @@ def test_evaluate_writes_validation_artifacts_and_result_contract(tmp_path, monk
     assert json.loads(results.read_text(encoding="utf-8")) == {
         "metric": "accuracy", "value": accuracy, "seed": 13, "split": "val", "notes": run.name,
     }
+
+
+def test_gallery_uses_loader_for_cifar_pseudo_paths(tmp_path):
+    import numpy as np
+    from PIL import Image
+
+    from ie4483.evaluate import _gallery
+
+    pixels = np.zeros((2, 32, 32, 3), dtype=np.uint8)
+    records = [{"path": f"cifar10/train/{i}", "index": i, "true": 0, "predicted": p, "p_dog": 0.2,
+                "true_name": "airplane", "predicted_name": "airplane" if p == 0 else "automobile",
+                "confidence": 0.8} for i, p in enumerate((0, 1))]
+    for kind in ("correct", "wrong", "uncertain"):
+        out = tmp_path / f"{kind}.png"
+        _gallery(records, kind, "airplane", out, lambda r: Image.fromarray(pixels[r["index"]], mode="RGB"))
+        assert out.exists()

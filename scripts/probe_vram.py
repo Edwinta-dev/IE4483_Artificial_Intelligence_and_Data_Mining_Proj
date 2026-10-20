@@ -17,6 +17,7 @@ from ie4483.seed import seed_everything
 from ie4483.vram import (
     EFFECTIVE_BATCH_SIZE,
     accumulation_steps,
+    check_fits_device,
     find_max_batch,
     write_probe_json,
 )
@@ -39,7 +40,8 @@ def _training_step(model: torch.nn.Module, batch_size: int, image_size: int, opt
     scaler.step(optimizer)
     scaler.update()
     del images, labels, logits, loss
-    return torch.cuda.max_memory_allocated()
+    total = torch.cuda.get_device_properties(device).total_memory
+    return check_fits_device(torch.cuda.max_memory_allocated(), total)
 
 
 def _mode_for_config(model_cfg: dict[str, Any]) -> str:

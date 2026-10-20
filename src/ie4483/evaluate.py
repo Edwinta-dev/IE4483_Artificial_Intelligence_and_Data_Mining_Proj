@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -56,7 +57,13 @@ def _plot_confusion(matrix: np.ndarray, classes: list[str], path: Path) -> None:
     plt.close(fig)
 
 
-def _gallery(records: list[dict[str, Any]], kind: str, class_name: str, output: Path) -> None:
+def _open_image(record: dict[str, Any]) -> Image.Image:
+    with Image.open(record["path"]) as image:
+        return image.convert("RGB")
+
+
+def _gallery(records: list[dict[str, Any]], kind: str, class_name: str, output: Path,
+             load_image: Callable[[dict[str, Any]], Image.Image] = _open_image) -> None:
     if kind == "correct":
         candidates = [r for r in records if r["true"] == r["predicted"] and r["true_name"] == class_name]
         chosen = sorted(candidates, key=lambda r: r["confidence"], reverse=True)[:_GALLERY_LIMIT]
@@ -71,8 +78,7 @@ def _gallery(records: list[dict[str, Any]], kind: str, class_name: str, output: 
         axes[0, 0].text(0.5, 0.5, "No matching validation images", ha="center", va="center")
         axes[0, 0].axis("off")
     for ax, record in zip(axes[0], chosen):
-        with Image.open(record["path"]) as image:
-            ax.imshow(image.convert("RGB"))
+        ax.imshow(load_image(record))
         ax.set_title(f"true={record['true_name']}  pred={record['predicted_name']}\np(dog)={record['p_dog']:.3f}")
         ax.axis("off")
     fig.tight_layout()
@@ -118,8 +124,8 @@ def evaluate(run: str | Path, results_path: str | Path = "results/latest.json", 
     classes = list(config.data.classes)
     records = []
     samples = dataset.samples if hasattr(dataset, "samples") else [("", int(label)) for label in dataset.labels]
-    for (path, truth), pred, p_dog in zip(samples, predictions, probabilities):
-        records.append({"path": str(path), "true": truth, "predicted": pred, "p_dog": p_dog,
+    for index, ((path, truth), pred, p_dog) in enumerate(zip(samples, predictions, probabilities)):
+        records.append({"path": str(path), "index": index, "true": truth, "predicted": pred, "p_dog": p_dog,
                         "true_name": classes[truth], "predicted_name": classes[pred],
                         "confidence": p_dog if pred == 1 else 1 - p_dog})
     metrics = _scores(truths, predictions, loss_sum / len(truths), classes)
@@ -136,9 +142,12 @@ def evaluate(run: str | Path, results_path: str | Path = "results/latest.json", 
     confusion_path = run_dir / ("confusion_matrix.png" if split == "val" else "test_confusion_matrix.png")
     _plot_confusion(matrix, classes, confusion_path)
     if split == "val" and hasattr(dataset, "samples"):
+        # CIFAR "paths" are identities, not files; read pixels from the dataset instead.
+        load_image = ((lambda record: Image.fromarray(dataset.images[record["index"]], mode="RGB"))
+                      if isinstance(dataset, CIFAR10Dataset) else _open_image)
         for name in classes:
             for kind in ("correct", "wrong", "uncertain"):
-                _gallery(records, kind, name, run_dir / f"gallery_{kind}_{name}.png")
+                _gallery(records, kind, name, run_dir / f"gallery_{kind}_{name}.png", load_image)
     result_path = Path(results_path)
     result_path.parent.mkdir(parents=True, exist_ok=True)
     result_path.write_text(json.dumps({"metric": "accuracy", "value": metrics["accuracy"],

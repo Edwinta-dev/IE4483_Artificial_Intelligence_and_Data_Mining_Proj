@@ -73,3 +73,11 @@ def test_cli_exits_without_cuda(monkeypatch: pytest.MonkeyPatch, capsys: pytest.
     monkeypatch.setattr("sys.argv", ["probe_vram.py"])
     probe_vram.main()
     assert "CUDA is unavailable" in capsys.readouterr().out
+
+
+def test_check_fits_device_rejects_shared_memory_spill() -> None:
+    from ie4483.vram import check_fits_device
+
+    assert check_fits_device(3 * 2**30, 4 * 2**30) == 3 * 2**30
+    with pytest.raises(torch.cuda.OutOfMemoryError):
+        check_fits_device(int(5.5 * 2**30), 4 * 2**30)
