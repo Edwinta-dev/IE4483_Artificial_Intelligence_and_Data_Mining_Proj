@@ -5,6 +5,7 @@ import json
 import statistics
 from pathlib import Path
 
+import pytest
 import torch
 import yaml
 from PIL import Image
@@ -97,3 +98,13 @@ def test_seed_summary_includes_per_seed_mean_and_std(tmp_path, monkeypatch):
     assert [float(row["mean"]) for row in table] == [0.5, 0.5]
     assert [float(row["std"]) for row in table] == [statistics.stdev([0.25, 0.75])] * 2
     assert "Mean: 0.500000; standard deviation: 0.353553" in (tmp_path / "seeds" / "summary.md").read_text(encoding="utf-8")
+
+
+def test_summary_groups_dict_parameter_values(tmp_path):
+    rows = [{"train.imbalance_fractions": value, "seed": seed, "run": f"r{seed}", "val_accuracy": acc}
+            for value, seed, acc in [(None, 0, 0.8), (None, 1, 0.9), ({"1": 0.1}, 0, 0.6), ({"1": 0.1}, 1, 0.7)]]
+    experiments._write_summary(rows, tmp_path, ["train.imbalance_fractions"])
+    table = list(csv.DictReader((tmp_path / "summary.csv").open(encoding="utf-8")))
+    assert len(table) == 2
+    assert statistics.mean([0.6, 0.7]) == pytest.approx(float(table[1]["mean"]))
+    assert '{"1": 0.1}' in (tmp_path / "summary.md").read_text(encoding="utf-8")

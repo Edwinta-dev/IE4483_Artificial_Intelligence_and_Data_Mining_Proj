@@ -316,8 +316,11 @@ def train(config: Config, extra: dict[str, Any] | None = None, run_root: str | P
         })
         LOGGER.info("Using %s frozen feature cache at %s", "reused" if reused else "built", cache_path)
         train_data, val_data = payload["train"], payload["val"]
-        train_loader = DataLoader(TensorDataset(*train_data), batch_size=config.train.batch_size, shuffle=True,
-                                  generator=torch.Generator().manual_seed(config.train.seed))
+        # Cached features keep the training-set order, so the balanced sampler's weights still line up.
+        train_loader = (DataLoader(TensorDataset(*train_data), batch_size=config.train.batch_size, sampler=sampler)
+                        if sampler is not None else
+                        DataLoader(TensorDataset(*train_data), batch_size=config.train.batch_size, shuffle=True,
+                                   generator=torch.Generator().manual_seed(config.train.seed)))
         val_loader = DataLoader(TensorDataset(*val_data), batch_size=config.eval.batch_size)
         return _fit(_HeadOnly(model.head), train_loader, val_loader, config, extra, run_dir, device,
                     config.train.gradient_accumulation_steps, checkpoint_model=model, resume=resume is not None)

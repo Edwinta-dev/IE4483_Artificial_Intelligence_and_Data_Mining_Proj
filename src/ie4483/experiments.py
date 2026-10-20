@@ -34,6 +34,13 @@ def _run_one(config_path: str | Path, seed: int, run_root: Path, overrides: list
     return run_dir, float(metrics["accuracy"])
 
 
+def _group_value(value: Any) -> Any:
+    """Return a hashable, readable grouping key for a sweep parameter value."""
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, sort_keys=True)
+    return value
+
+
 def _write_summary(rows: list[dict[str, Any]], output: Path, dimensions: list[str] | None = None) -> None:
     output.mkdir(parents=True, exist_ok=True)
     fields = (dimensions or []) + ["seed", "run", "val_accuracy"]
@@ -41,7 +48,7 @@ def _write_summary(rows: list[dict[str, Any]], output: Path, dimensions: list[st
     if dimensions:
         grouped: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
         for row in rows:
-            grouped.setdefault(tuple(row[key] for key in dimensions), []).append(row)
+            grouped.setdefault(tuple(_group_value(row[key]) for key in dimensions), []).append(row)
         seed_ids = sorted({row["seed"] for row in rows})
         fields = dimensions + ["seed_count", "mean", "std"] + [f"seed_{seed}_accuracy" for seed in seed_ids]
         csv_rows = []
@@ -65,7 +72,7 @@ def _write_summary(rows: list[dict[str, Any]], output: Path, dimensions: list[st
         writer.writerows(csv_rows)
     grouped: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
     for row in rows:
-        grouped.setdefault(tuple(row.get(key) for key in (dimensions or [])), []).append(row)
+        grouped.setdefault(tuple(_group_value(row.get(key)) for key in (dimensions or [])), []).append(row)
     lines = ["# Experiment summary", ""]
     if dimensions:
         lines.append("| " + " | ".join([*dimensions, "Seeds", "Mean validation accuracy ± std"]) + " |")
@@ -150,19 +157,23 @@ def sweep(sweep_path: str | Path, output: str | Path | None = None) -> list[dict
             rows.append({**cell, "seed": seed, "run": str(run_dir), "val_accuracy": accuracy})
         _write_summary(rows, output, dimensions)
     # Sort cells by average validation accuracy; ties retain their declared grid order.
+    def cell_key(values):
+        return tuple(_group_value(value) for value in values)
+
+    def row_key(row):
+        return cell_key(row[d] for d in dimensions)
+
     cell_scores = {}
     for values in combinations:
-        key = tuple(values)
-        selected = [float(row["val_accuracy"]) for row in rows if tuple(row[d] for d in dimensions) == key]
-        cell_scores[key] = mean(selected)
-    ordered = sorted(combinations, key=lambda values: cell_scores[tuple(values)], reverse=True)
-    ordered_rows = [row for values in ordered for row in rows
-                    if tuple(row[d] for d in dimensions) == tuple(values)]
+        selected = [float(row["val_accuracy"]) for row in rows if row_key(row) == cell_key(values)]
+        cell_scores[cell_key(values)] = mean(selected)
+    ordered = sorted(combinations, key=lambda values: cell_scores[cell_key(values)], reverse=True)
+    ordered_rows = [row for values in ordered for row in rows if row_key(row) == cell_key(values)]
     _write_summary(ordered_rows, output, dimensions)
-    means = [cell_scores[tuple(values)] for values in ordered]
+    means = [cell_scores[cell_key(values)] for values in ordered]
     errors = []
     for values in ordered:
-        scores = [float(row["val_accuracy"]) for row in rows if tuple(row[d] for d in dimensions) == tuple(values)]
+        scores = [float(row["val_accuracy"]) for row in rows if row_key(row) == cell_key(values)]
         errors.append(stdev(scores) if len(scores) > 1 else 0.0)
     labels = [", ".join(f"{key}={value}" for key, value in zip(dimensions, values)) for values in ordered]
     fig, ax = plt.subplots(figsize=(max(6, len(labels) * 1.1), 4))

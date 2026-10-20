@@ -259,3 +259,23 @@ def test_repeatability_check_compares_same_seed_and_records_switch(tmp_path, mon
     ) / "config.yaml").read_text(encoding="utf-8")) for i in range(3)]
     assert [item["train"]["seed"] for item in configs] == [19, 19, 20]
     assert all(item["train"]["deterministic"] is True for item in configs)
+
+
+def test_weighted_sampler_applies_on_frozen_feature_cache_path(tmp_path, monkeypatch):
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    _images(tmp_path, "train")
+    _images(tmp_path, "val")
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(
+        "data:\n  root: '" + str(tmp_path).replace("\\", "/") + "'\n  image_size: 32\n"
+        "model:\n  architecture: resnet18\n  pretrained: false\n  freeze_backbone: true\n"
+        "train:\n  batch_size: 2\n  seed: 9\n  epochs: 1\n  mixed_precision: false\n"
+        "eval:\n  batch_size: 2\n",
+        encoding="utf-8",
+    )
+    import ie4483.train as train_module
+    seen = []
+    original = train_module._fit
+    monkeypatch.setattr(train_module, "_fit", lambda model, loader, *a, **k: seen.append(loader) or original(model, loader, *a, **k))
+    train(load_config(config_file), {"feature_cache": "auto", "weighted_sampler": True}, tmp_path / "runs")
+    assert isinstance(seen[0].sampler, torch.utils.data.WeightedRandomSampler)
