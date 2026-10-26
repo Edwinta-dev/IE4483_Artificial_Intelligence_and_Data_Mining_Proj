@@ -1,7 +1,9 @@
 import argparse
-from pathlib import Path
-from PIL import Image, ImageOps
+import hashlib
 from collections import Counter
+from pathlib import Path
+
+from PIL import Image, ImageOps
 
 # Repo root is two levels above src/ie4483/. Raw handoff goes in raw-data/datasets
 # (the folder holding train/, val/, test/); output lands in data/, the pipeline's default root.
@@ -25,9 +27,13 @@ def preprocess_images(input_dir, output_dir, image_size):
     if(input_resolved == output_resolved or input_resolved in output_resolved.parents):
         raise ValueError("Output directory cannot be the same as or a subdirectory of the input directory.")
 
-    image_files = [
-        path for path in input_dir.rglob("*") if path.is_file() and path.suffix.lower() in supported_formats
-    ]
+    # Process splits in priority order so a source image shared by train and
+    # validation remains in train. Stable paths make the retained copy repeatable.
+    split_order = {"train": 0, "val": 1, "test": 2}
+    image_files = sorted(
+        (path for path in input_dir.rglob("*") if path.is_file() and path.suffix.lower() in supported_formats),
+        key=lambda path: (split_order.get(path.relative_to(input_dir).parts[0], 3), path.relative_to(input_dir).as_posix()),
+    )
     
     if not image_files:
         print("No supported image files found.")
@@ -42,6 +48,14 @@ def preprocess_images(input_dir, output_dir, image_size):
     processed_count = 0
     failed_list = []
     folder_count = Counter()
+    seen_hashes = set()
+
+    # The destination is generated output. Remove old supported images first so
+    # reruns cannot leave files from an earlier handoff behind.
+    if output_dir.exists():
+        for old_path in output_dir.rglob("*"):
+            if old_path.is_file() and old_path.suffix.lower() in supported_formats:
+                old_path.unlink()
 
     for index, image_path in enumerate(image_files, start=1):
         try:
@@ -60,17 +74,23 @@ def preprocess_images(input_dir, output_dir, image_size):
 
                 image.save(output_path, format="JPEG", quality=95)
 
+            digest = hashlib.sha256(output_path.read_bytes()).digest()
+            if digest in seen_hashes:
+                output_path.unlink()
+                continue
+            seen_hashes.add(digest)
+
             processed_count += 1
             folder_count[relative_path.parent] += 1
 
             if index % 100 == 0 or index == len(image_files):
                 print(f"Processed {index}/{len(image_files)} images...")
 
-        except Exception as error:
+        except (OSError, ValueError) as error:
             failed_list.append((str(image_path), str(error)))
             print (f"Failed to process {image_path} -- {error}")
 
-    print(f"\n======== Summary ========")
+    print("\n======== Summary ========")
     print(f"Total images found: {len(image_files)}")
     print(f"Successfully processed: {processed_count}")
     print(f"Failed images: {failed_list}")

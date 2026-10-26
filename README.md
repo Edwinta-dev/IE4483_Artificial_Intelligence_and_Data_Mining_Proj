@@ -84,11 +84,14 @@ Python/PyTorch versions, and whether CUDA can allocate a small tensor. To check
 a specific root, pass `--data-root PATH`; to resolve it from a config, pass
 `--config PATH`.
 
-Audit a cleaned data handoff before training. The command writes `audit.json`
-and `audit.md` into the audited root and exits with status 1 for a missing
-required directory or a train/validation duplicate:
+Preprocess and audit the team handoff before training. Preprocessing reads
+`raw-data/datasets/`, writes 224x224 JPEGs under `data/`, and removes exact
+duplicates while prioritizing train over validation and test. The audit writes
+`audit.json` and `audit.md` into the audited root and exits with status 1 for a
+missing required directory or a train/validation duplicate:
 
 ```powershell
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe src/ie4483/preprocess_images.py
 C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/audit_data.py --root data
 C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/audit_data.py --root data --compare raw-data
 ```
