@@ -70,6 +70,18 @@ test sets are unchanged. Run it with:
 C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/sweep.py --sweep configs/sweeps/imbalance.yaml
 ```
 
+Run the one-seed real-data GPU baseline comparison after the local ResNet
+weights are cached and the cleaned Dogs vs Cats data is under `data/`. The
+configuration compares ResNet-18 and ResNet-50 in head-only (`frozen`),
+last-block, and full fine-tuning modes with AMP and early stopping. Run folders
+and the generated sweep summary stay under ignored `runs/`; the completed
+baseline sweep also writes its report table to `docs/sweep_results.md`:
+
+```powershell
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/probe_vram.py --config configs/base.yaml
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/sweep.py --sweep configs/sweeps/gpu_baseline.yaml
+```
+
 The owner can cache torchvision's ResNet-18 and ResNet-50 ImageNet weights
 once, and check the local setup, with:
 

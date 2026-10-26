@@ -3,6 +3,8 @@ from __future__ import annotations
 import csv
 import json
 import statistics
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -11,6 +13,41 @@ import yaml
 from PIL import Image
 
 from ie4483 import experiments
+from scripts.sweep import write_report
+
+
+def test_sweep_cli_help_bootstraps_src_layout():
+    script = Path(__file__).resolve().parents[1] / "scripts" / "sweep.py"
+    result = subprocess.run([sys.executable, str(script), "--help"], check=False,
+                            capture_output=True, text=True)
+    assert result.returncode == 0
+    assert "--sweep" in result.stdout
+
+
+def test_gpu_report_uses_completed_metrics_and_rejects_proxy(tmp_path):
+    run = tmp_path / "run"
+    run.mkdir()
+    (run / "metrics.csv").write_text(
+        "epoch,train_loss,train_acc,val_loss,val_acc,lr,seconds\n"
+        "1,0.8,0.7,0.6,0.75,0.001,12\n2,0.6,0.8,0.5,0.82,0.001,10\n",
+        encoding="utf-8",
+    )
+    (run / "val_metrics.json").write_text('{"accuracy": 0.82}', encoding="utf-8")
+    row = {"model.architecture": "resnet18", "model.freeze_mode": "frozen",
+           "seed": 42, "run": str(run), "val_accuracy": 0.82}
+    report = tmp_path / "sweep_results.md"
+    result = write_report([row], report)
+    assert result[0]["best_val_accuracy"] == pytest.approx(0.82)
+    assert result[0]["epochs"] == 2
+    assert result[0]["seconds_per_epoch"] == pytest.approx(11)
+    assert "| 0.820000 | 2 | 11.00 |" in report.read_text(encoding="utf-8")
+    (run / "val_metrics.json").unlink()
+    with pytest.raises(ValueError, match="no completed validation metrics"):
+        write_report([row], report)
+    (run / "val_metrics.json").write_text('{"accuracy": 0.82}', encoding="utf-8")
+    (run / "latest.json").write_text('{"proxy": true}', encoding="utf-8")
+    with pytest.raises(ValueError, match="proxy run"):
+        write_report([row], report)
 
 
 def _dataset(root):
