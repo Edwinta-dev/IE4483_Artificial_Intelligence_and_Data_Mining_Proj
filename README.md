@@ -214,6 +214,17 @@ C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/predict.py --run runs/pat
 C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/predict.py --run runs/path-to-run --tta flip
 ```
 
+Reproduce the selected ResNet-50 frozen configuration across seeds 0, 1, and 2
+after the owner has prepared the real data and local weights. The result report
+and copied figures are in `docs/results.md` and `docs/figures/`; the root
+`submission.csv` was generated from the seed with the highest validation accuracy.
+Use the saved seed run folders with the evaluation, prediction, and figure-report
+commands above. The `runs/` artifacts are local and are not committed.
+
+```powershell
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/run_seeds.py --config configs/base.yaml --seeds 0 1 2 --set model.architecture=resnet50 --set model.freeze_mode=frozen --set train.batch_size=71 --set train.gradient_accumulation_steps=1 --set train.mixed_precision=true --set train.epochs=10 --set train.patience=3 --output runs/seeds/best
+```
+
 ## Tests
 
 Run the CPU test suite with:
