@@ -6,6 +6,8 @@ venv/
 .env.*
 !.env.example
 data/
+data_aug/
+data_mixed/
 raw-data/
 results/
 runs/

@@ -117,6 +117,17 @@ pipelines, or leave them all disabled to use the evaluation preprocessing.
 C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/preview_augment.py --image path/to/image.jpg --n 8 --output runs/augmentation_preview.png
 ```
 
+Create fixed on-disk training views with one seeded random adjustment per
+training image. `augmented` contains adjusted images only; `mixed` retains each
+original beside its adjusted JPEG. Validation and test files are copied
+unchanged, and `augmentation.csv` records the operation and sampled parameters.
+The project data outputs are ignored by git:
+
+```powershell
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/make_augmented_view.py --input data --output data_aug --mode augmented --seed 0
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/make_augmented_view.py --input data --output data_mixed --mode mixed --seed 0
+```
+
 Probe CUDA memory before training to find a safety-adjusted batch for each
 ResNet-18/50 freeze mode. The command uses synthetic batches and local random
 weights, writes `vram_probe.json` under `runs/`, and does not need project data.
