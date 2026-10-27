@@ -74,8 +74,10 @@ def preprocess_images(input_dir, output_dir, image_size):
 
                 image.save(output_path, format="JPEG", quality=95)
 
+            # Never drop a test image: submission.csv needs one row per test ID.
+            is_test = relative_path.parts[0] == "test"
             digest = hashlib.sha256(output_path.read_bytes()).digest()
-            if digest in seen_hashes:
+            if digest in seen_hashes and not is_test:
                 output_path.unlink()
                 continue
             seen_hashes.add(digest)

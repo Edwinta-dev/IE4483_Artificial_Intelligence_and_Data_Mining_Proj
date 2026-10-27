@@ -79,7 +79,7 @@ baseline sweep also writes its report table to `docs/sweep_results.md`:
 
 ```powershell
 C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/probe_vram.py --config configs/base.yaml
-C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/sweep.py --sweep configs/sweeps/gpu_baseline.yaml
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/sweep.py --sweep configs/sweeps/gpu_baseline.yaml --report docs/sweep_results.md
 ```
 
 The owner can cache torchvision's ResNet-18 and ResNet-50 ImageNet weights

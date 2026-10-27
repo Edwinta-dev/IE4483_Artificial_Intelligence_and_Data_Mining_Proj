@@ -141,11 +141,13 @@ def _rng_state(loader):
 def _restore_rng(state, loader):
     random.setstate(state["python"])
     np.random.set_state(state["numpy"])
-    torch.set_rng_state(state["torch"])
+    # The checkpoint is loaded with map_location=device, which moves these ByteTensors
+    # onto the GPU; the RNG setters only accept CPU tensors.
+    torch.set_rng_state(state["torch"].cpu())
     if state.get("cuda") is not None and torch.cuda.is_available():
-        torch.cuda.set_rng_state_all(state["cuda"])
+        torch.cuda.set_rng_state_all([s.cpu() for s in state["cuda"]])
     if loader.generator is not None and state.get("loader") is not None:
-        loader.generator.set_state(state["loader"])
+        loader.generator.set_state(state["loader"].cpu())
 
 
 def _atomic_save(payload, path):

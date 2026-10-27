@@ -63,10 +63,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sweep", required=True, help="sweep YAML file")
     parser.add_argument("--output", default=None, help="output folder (default runs/sweeps/<name>)")
+    parser.add_argument("--report", type=Path, default=None,
+                        help="also write a Markdown results table here (e.g. docs/sweep_results.md)")
     args = parser.parse_args()
     rows = sweep(args.sweep, args.output)
-    if Path(args.sweep).stem == "gpu_baseline":
-        write_report(rows, Path("docs/sweep_results.md"))
+    if args.report:
+        write_report(rows, args.report)
     print(f"Completed {len(rows)} seed runs; summary: {args.output or 'runs/sweeps/' + args.sweep.rsplit('/', 1)[-1].removesuffix('.yaml')}")
 
 

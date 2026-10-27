@@ -17,6 +17,7 @@ def test_preprocessing_deduplicates_across_splits_and_replaces_old_images(tmp_pa
     write_image(source / "val/cat/leak.png", "red")
     write_image(source / "val/dog/unique.png", "blue")
     write_image(source / "test/1.png", "green")
+    write_image(source / "test/2.png", "red")  # duplicates a train image; must survive
     write_image(output / "train/cat/stale.jpg", "black")
 
     preprocess_images(source, output, (16, 16))
@@ -27,4 +28,5 @@ def test_preprocessing_deduplicates_across_splits_and_replaces_old_images(tmp_pa
     assert not (output / "val/cat/leak.jpg").exists()
     assert (output / "val/dog/unique.jpg").is_file()
     assert (output / "test/1.jpg").is_file()
+    assert (output / "test/2.jpg").is_file()
     assert not (output / "train/cat/stale.jpg").exists()
