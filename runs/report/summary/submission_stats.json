@@ -1,0 +1,41 @@
+{
+  "labels": {
+    "cat": 240,
+    "dog": 260
+  },
+  "confidence_histogram": [
+    {
+      "range": "0.00-0.50",
+      "count": 0
+    },
+    {
+      "range": "0.50-0.60",
+      "count": 1
+    },
+    {
+      "range": "0.60-0.70",
+      "count": 3
+    },
+    {
+      "range": "0.70-0.80",
+      "count": 2
+    },
+    {
+      "range": "0.80-0.90",
+      "count": 1
+    },
+    {
+      "range": "0.90-0.95",
+      "count": 3
+    },
+    {
+      "range": "0.95-0.99",
+      "count": 38
+    },
+    {
+      "range": "0.99-1.00",
+      "count": 452
+    }
+  ],
+  "source_run": "runs/seeds/best/seed_1/20261027-000356-504242-resnet50"
+}

@@ -1,0 +1,5 @@
+adjustment,images,example_parameters
+colour_jitter,4877,brightness=1.10318176;contrast=0.96822863;saturation=0.90356670
+horizontal_flip,4988,horizontal
+random_resized_crop,4997,scale=0.99745184;ratio=1.06066212;left=0;top=4;width=224;height=217
+rotation,5133,angle=-6.54486467

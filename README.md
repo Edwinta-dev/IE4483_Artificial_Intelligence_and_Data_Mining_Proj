@@ -225,6 +225,16 @@ C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/predict.py --run runs/pat
 C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/predict.py --run runs/path-to-run --tta flip
 ```
 
+Regenerate the team report's text summary from the finished sweep and seed runs,
+then execute `notebooks/cats_vs_dogs_report.ipynb` from the repository root. The
+notebook reads only `runs/report/summary/` and optional local images from `data/`;
+its HTML share copy is written under ignored `runs/report/`.
+
+```powershell
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/export_report_summary.py
+jupyter nbconvert --execute --to html --output-dir runs/report notebooks/cats_vs_dogs_report.ipynb
+```
+
 Reproduce the selected ResNet-50 frozen configuration across seeds 0, 1, and 2
 after the owner has prepared the real data and local weights. The result report
 and copied figures are in `docs/results.md` and `docs/figures/`; the root

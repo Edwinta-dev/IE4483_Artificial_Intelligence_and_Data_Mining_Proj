@@ -1,0 +1,10 @@
+{
+  "counts": {
+    "train/cat": 9998,
+    "train/dog": 9997,
+    "val/cat": 2499,
+    "val/dog": 2500,
+    "test": 500
+  },
+  "deduplicated_images": 6
+}

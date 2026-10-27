@@ -10,7 +10,11 @@ data_aug/
 data_mixed/
 raw-data/
 results/
-runs/
+runs/*
+!runs/report/
+runs/report/*
+!runs/report/summary/
+!runs/report/summary/**
 models/
 *.pt
 *.pth
