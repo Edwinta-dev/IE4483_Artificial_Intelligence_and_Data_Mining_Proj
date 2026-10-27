@@ -40,4 +40,4 @@ The comparison figure covers the six baseline sweep runs and all three seed runs
 
 ![Seed 1 training and validation curves](figures/best_seed_training_curves.png)
 
-The root [`submission.csv`](../submission.csv) has the required `id,label` header and 500 test-image rows sorted by numeric ID. Labels use 1 for dog and 0 for cat. Predictions were produced by seed 1's `best.pt` without test-time augmentation.
+The root [`submission.csv`](../submission.csv) has the required `id,label` header and 500 test-image rows sorted by numeric ID. Labels use 1 for dog and 0 for cat. Predictions now come from the augmented-data model (`runs/seeds/aug/`, seed 1, 99.60% validation accuracy; data from `scripts/make_augmented_view.py --mode augmented`) without test-time augmentation. It changes 1 of 500 labels relative to the earlier baseline seed 1 submission.
