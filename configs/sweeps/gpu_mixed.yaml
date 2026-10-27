@@ -1,0 +1,12 @@
+config: configs/base.yaml
+seeds: [42]
+overrides:
+  - data.root=data_mixed
+  - train.batch_size=71
+  - train.gradient_accumulation_steps=1
+  - train.mixed_precision=true
+  - train.epochs=10
+  - train.patience=3
+parameters:
+  model.architecture: [resnet18, resnet50]
+  model.freeze_mode: [frozen, last_block, full]
