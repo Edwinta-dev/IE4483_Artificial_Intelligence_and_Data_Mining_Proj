@@ -2,7 +2,7 @@
 config: configs/cifar10.yaml
 seeds: [0, 1, 2]
 overrides:
-  - train.imbalance_fractions={"3": 0.1}
+  - 'train.imbalance_fractions={"3": 0.1}'
   - train.cifar_augment=false
   - model.freeze_mode=frozen
   - train.batch_size=71
