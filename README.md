@@ -38,6 +38,24 @@ C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/evaluate.py --run runs/pa
 Evaluation writes per-class scores and a ten-by-ten confusion matrix in the
 run folder, including macro-F1 and macro recall. No dataset is downloaded by tests.
 
+After the CIFAR baseline and imbalance sweeps are complete, evaluate every
+checkpoint on the official CIFAR test split and build the report from those
+saved metrics. The report contains the per-run metrics table, confusion
+matrices, seed-spread comparison, and missed-cat destinations. It does not
+train models:
+
+```powershell
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/evaluate.py --run PATH_TO_COMPLETED_RUN --split test
+C:/Users/AgenticDev/ml-venv/Scripts/python.exe scripts/cifar_report.py
+```
+
+Repeat the evaluation command for each completed run under
+`cifar_baseline`, `cifar_imb_none`, `cifar_imb_weighted`,
+`cifar_imb_sampler`, and `cifar_imb_focal`. The generator reads each run's
+`test_metrics.json`, writes numeric summaries to `runs/report/cifar/`, and
+writes figures under `docs/figures/` with the narrative at
+`docs/cifar_results.md`.
+
 To exercise the binary Dogs vs Cats pipeline before the cleaned images arrive,
 the owner can fetch CIFAR-10 and materialize its cat (class 3) and dog (class 5)
 images as a marked stand-in dataset. The generator uses the existing seeded
