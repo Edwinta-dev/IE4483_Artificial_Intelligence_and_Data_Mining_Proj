@@ -1,0 +1,11 @@
+# Balanced CIFAR-10, head only. cifar_augment off so the frozen-feature cache is used.
+config: configs/cifar10.yaml
+seeds: [42]
+overrides:
+  - train.cifar_augment=false
+  - model.freeze_mode=frozen
+  - train.batch_size=71
+  - train.epochs=10
+  - train.patience=3
+parameters:
+  model.architecture: [resnet18, resnet50]

@@ -1,0 +1,492 @@
+{
+  "rows": [
+    {
+      "run": "runs/sweeps/cifar_baseline/resnet18__3ecc064117/seed_42/20261028-152604-617592-resnet18",
+      "backbone": "resnet18",
+      "fix": "balanced",
+      "seed": 42,
+      "test_accuracy": 0.8337,
+      "macro_f1": 0.8342445439789368,
+      "macro_recall": 0.8337,
+      "cat_recall": 0.775,
+      "cat_precision": 0.6828193832599119
+    },
+    {
+      "run": "runs/sweeps/cifar_baseline/resnet50__7c60af6bd0/seed_42/20261028-152834-577511-resnet50",
+      "backbone": "resnet50",
+      "fix": "balanced",
+      "seed": 42,
+      "test_accuracy": 0.9005,
+      "macro_f1": 0.9006535191940813,
+      "macro_recall": 0.9004999999999999,
+      "cat_recall": 0.824,
+      "cat_precision": 0.7945998071359691
+    },
+    {
+      "run": "runs/sweeps/cifar_imb_none/resnet18__3ecc064117/seed_0/20261028-153336-779542-resnet18",
+      "backbone": "resnet18",
+      "fix": "none",
+      "seed": 0,
+      "test_accuracy": 0.8115,
+      "macro_f1": 0.8054948428699136,
+      "macro_recall": 0.8115,
+      "cat_recall": 0.422,
+      "cat_precision": 0.8629856850715747
+    },
+    {
+      "run": "runs/sweeps/cifar_imb_none/resnet18__3ecc064117/seed_1/20261028-153604-232749-resnet18",
+      "backbone": "resnet18",
+      "fix": "none",
+      "seed": 1,
+      "test_accuracy": 0.811,
+      "macro_f1": 0.8018889895842541,
+      "macro_recall": 0.8109999999999999,
+      "cat_recall": 0.341,
+      "cat_precision": 0.9117647058823529
+    },
+    {
+      "run": "runs/sweeps/cifar_imb_none/resnet18__3ecc064117/seed_2/20261028-153753-693301-resnet18",
+      "backbone": "resnet18",
+      "fix": "none",
+      "seed": 2,
+      "test_accuracy": 0.7978,
+      "macro_f1": 0.793381762376826,
+      "macro_recall": 0.7978,
+      "cat_recall": 0.442,
+      "cat_precision": 0.8403041825095057
+    },
+    {
+      "run": "runs/sweeps/cifar_imb_weighted/resnet18__3ecc064117/seed_0/20261028-153938-805166-resnet18",
+      "backbone": "resnet18",
+      "fix": "class-weighted loss",
+      "seed": 0,
+      "test_accuracy": 0.8252,
+      "macro_f1": 0.8246595209340161,
+      "macro_recall": 0.8252,
+      "cat_recall": 0.656,
+      "cat_precision": 0.7068965517241379
+    },
+    {
+      "run": "runs/sweeps/cifar_imb_weighted/resnet18__3ecc064117/seed_1/20261028-154128-476169-resnet18",
+      "backbone": "resnet18",
+      "fix": "class-weighted loss",
+      "seed": 1,
+      "test_accuracy": 0.8282,
+      "macro_f1": 0.8272886733011209,
+      "macro_recall": 0.8282,
+      "cat_recall": 0.636,
+      "cat_precision": 0.75177304964539
+    },
+    {
+      "run": "runs/sweeps/cifar_imb_weighted/resnet18__3ecc064117/seed_2/20261028-154324-961000-resnet18",
+      "backbone": "resnet18",
+      "fix": "class-weighted loss",
+      "seed": 2,
+      "test_accuracy": 0.8196,
+      "macro_f1": 0.8198942498819175,
+      "macro_recall": 0.8196,
+      "cat_recall": 0.662,
+      "cat_precision": 0.6768916155419223
+    },
+    {
+      "run": "runs/sweeps/cifar_imb_sampler/resnet18__3ecc064117/seed_0/20261028-154536-036382-resnet18",
+      "backbone": "resnet18",
+      "fix": "weighted sampler",
+      "seed": 0,
+      "test_accuracy": 0.8248,
+      "macro_f1": 0.8235218961158086,
+      "macro_recall": 0.8248,
+      "cat_recall": 0.607,
+      "cat_precision": 0.7304452466907341
+    },
+    {
+      "run": "runs/sweeps/cifar_imb_sampler/resnet18__3ecc064117/seed_1/20261028-154735-969474-resnet18",
+      "backbone": "resnet18",
+      "fix": "weighted sampler",
+      "seed": 1,
+      "test_accuracy": 0.8242,
+      "macro_f1": 0.8231472914083972,
+      "macro_recall": 0.8242,
+      "cat_recall": 0.612,
+      "cat_precision": 0.760248447204969
+    },
+    {
+      "run": "runs/sweeps/cifar_imb_sampler/resnet18__3ecc064117/seed_2/20261028-154923-821643-resnet18",
+      "backbone": "resnet18",
+      "fix": "weighted sampler",
+      "seed": 2,
+      "test_accuracy": 0.8213,
+      "macro_f1": 0.819808989729626,
+      "macro_recall": 0.8213000000000001,
+      "cat_recall": 0.606,
+      "cat_precision": 0.7248803827751196
+    },
+    {
+      "run": "runs/sweeps/cifar_imb_focal/resnet18__3ecc064117/seed_0/20261028-155145-723110-resnet18",
+      "backbone": "resnet18",
+      "fix": "focal loss",
+      "seed": 0,
+      "test_accuracy": 0.8113,
+      "macro_f1": 0.804022753152456,
+      "macro_recall": 0.8112999999999999,
+      "cat_recall": 0.385,
+      "cat_precision": 0.8912037037037037
+    },
+    {
+      "run": "runs/sweeps/cifar_imb_focal/resnet18__3ecc064117/seed_1/20261028-155409-104026-resnet18",
+      "backbone": "resnet18",
+      "fix": "focal loss",
+      "seed": 1,
+      "test_accuracy": 0.8087,
+      "macro_f1": 0.8007786635191076,
+      "macro_recall": 0.8087,
+      "cat_recall": 0.359,
+      "cat_precision": 0.8930348258706468
+    },
+    {
+      "run": "runs/sweeps/cifar_imb_focal/resnet18__3ecc064117/seed_2/20261028-155643-495715-resnet18",
+      "backbone": "resnet18",
+      "fix": "focal loss",
+      "seed": 2,
+      "test_accuracy": 0.8036,
+      "macro_f1": 0.794935292394876,
+      "macro_recall": 0.8036,
+      "cat_recall": 0.333,
+      "cat_precision": 0.8927613941018767
+    }
+  ],
+  "summaries": {
+    "none": {
+      "test_accuracy": {
+        "mean": 0.8067666666666666,
+        "std": 0.007769384359994939
+      },
+      "cat_recall": {
+        "mean": 0.40166666666666667,
+        "std": 0.053482084227648906
+      }
+    },
+    "class-weighted loss": {
+      "test_accuracy": {
+        "mean": 0.8243333333333334,
+        "std": 0.004365012409298922
+      },
+      "cat_recall": {
+        "mean": 0.6513333333333333,
+        "std": 0.013613718571108104
+      }
+    },
+    "weighted sampler": {
+      "test_accuracy": {
+        "mean": 0.8234333333333334,
+        "std": 0.001871719352182178
+      },
+      "cat_recall": {
+        "mean": 0.6083333333333333,
+        "std": 0.0032145502536643214
+      }
+    },
+    "focal loss": {
+      "test_accuracy": {
+        "mean": 0.8078666666666666,
+        "std": 0.00391705671816652
+      },
+      "cat_recall": {
+        "mean": 0.359,
+        "std": 0.025999999999999995
+      }
+    }
+  },
+  "cat_row_mean_counts": {
+    "none": {
+      "airplane": 21.333333333333332,
+      "automobile": 11.666666666666666,
+      "bird": 68.33333333333333,
+      "deer": 86.33333333333333,
+      "dog": 267.3333333333333,
+      "frog": 86.0,
+      "horse": 32.0,
+      "ship": 7.666666666666667,
+      "truck": 17.666666666666668
+    },
+    "class-weighted loss": {
+      "airplane": 10.0,
+      "automobile": 5.666666666666667,
+      "bird": 48.0,
+      "deer": 62.0,
+      "dog": 138.0,
+      "frog": 48.666666666666664,
+      "horse": 16.666666666666668,
+      "ship": 7.333333333333333,
+      "truck": 12.333333333333334
+    },
+    "weighted sampler": {
+      "airplane": 10.333333333333334,
+      "automobile": 7.333333333333333,
+      "bird": 50.333333333333336,
+      "deer": 61.0,
+      "dog": 163.33333333333334,
+      "frog": 55.0,
+      "horse": 25.0,
+      "ship": 7.333333333333333,
+      "truck": 12.0
+    },
+    "focal loss": {
+      "airplane": 20.0,
+      "automobile": 9.0,
+      "bird": 77.66666666666667,
+      "deer": 82.66666666666667,
+      "dog": 317.3333333333333,
+      "frog": 77.33333333333333,
+      "horse": 34.333333333333336,
+      "ship": 8.0,
+      "truck": 14.666666666666666
+    }
+  },
+  "confusion_matrices": {
+    "balanced_resnet50": [
+      [
+        898,
+        4,
+        17,
+        10,
+        4,
+        1,
+        4,
+        5,
+        37,
+        20
+      ],
+      [
+        6,
+        909,
+        0,
+        3,
+        1,
+        0,
+        3,
+        1,
+        5,
+        72
+      ],
+      [
+        11,
+        1,
+        871,
+        30,
+        29,
+        11,
+        37,
+        7,
+        2,
+        1
+      ],
+      [
+        4,
+        1,
+        10,
+        824,
+        20,
+        88,
+        28,
+        12,
+        8,
+        5
+      ],
+      [
+        5,
+        1,
+        18,
+        23,
+        888,
+        15,
+        20,
+        27,
+        3,
+        0
+      ],
+      [
+        1,
+        0,
+        6,
+        89,
+        16,
+        863,
+        11,
+        11,
+        3,
+        0
+      ],
+      [
+        4,
+        0,
+        10,
+        34,
+        6,
+        2,
+        943,
+        0,
+        1,
+        0
+      ],
+      [
+        4,
+        0,
+        6,
+        13,
+        29,
+        22,
+        2,
+        919,
+        1,
+        4
+      ],
+      [
+        31,
+        6,
+        0,
+        5,
+        0,
+        2,
+        0,
+        1,
+        947,
+        8
+      ],
+      [
+        14,
+        27,
+        0,
+        6,
+        0,
+        0,
+        1,
+        0,
+        9,
+        943
+      ]
+    ],
+    "none": [
+      [
+        854,
+        17,
+        16,
+        2,
+        19,
+        0,
+        7,
+        11,
+        59,
+        15
+      ],
+      [
+        20,
+        931,
+        1,
+        0,
+        1,
+        0,
+        2,
+        0,
+        6,
+        39
+      ],
+      [
+        39,
+        1,
+        750,
+        12,
+        84,
+        17,
+        75,
+        16,
+        5,
+        1
+      ],
+      [
+        19,
+        16,
+        54,
+        422,
+        104,
+        219,
+        108,
+        34,
+        6,
+        18
+      ],
+      [
+        9,
+        2,
+        32,
+        5,
+        849,
+        18,
+        44,
+        38,
+        0,
+        3
+      ],
+      [
+        2,
+        4,
+        17,
+        38,
+        39,
+        833,
+        32,
+        27,
+        2,
+        6
+      ],
+      [
+        5,
+        0,
+        20,
+        5,
+        40,
+        10,
+        913,
+        5,
+        1,
+        1
+      ],
+      [
+        14,
+        6,
+        12,
+        5,
+        84,
+        24,
+        9,
+        837,
+        2,
+        7
+      ],
+      [
+        54,
+        26,
+        8,
+        0,
+        7,
+        2,
+        2,
+        2,
+        882,
+        17
+      ],
+      [
+        18,
+        111,
+        0,
+        0,
+        3,
+        2,
+        2,
+        3,
+        17,
+        844
+      ]
+    ]
+  }
+}

@@ -1,0 +1,13 @@
+# Imbalanced CIFAR-10: cat (class 3) cut to 10% of its training images. Fix: focal.
+config: configs/cifar10.yaml
+seeds: [0, 1, 2]
+overrides:
+  - 'train.imbalance_fractions={"3": 0.1}'
+  - train.cifar_augment=false
+  - model.freeze_mode=frozen
+  - train.batch_size=71
+  - train.epochs=10
+  - train.patience=3
+  - train.focal_gamma=2.0
+parameters:
+  model.architecture: [resnet18]

@@ -1,0 +1,5 @@
+adjustment,source_path,parameter
+colour_jitter,train/cat/cat.0.jpg,brightness=1.10318176;contrast=0.96822863;saturation=0.90356670
+horizontal_flip,train/cat/cat.10002.jpg,horizontal
+random_resized_crop,train/cat/cat.10003.jpg,scale=0.99745184;ratio=1.06066212;left=0;top=4;width=224;height=217
+rotation,train/cat/cat.10001.jpg,angle=-6.54486467

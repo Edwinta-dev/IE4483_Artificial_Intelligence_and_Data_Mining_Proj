@@ -1,0 +1,24 @@
+data:
+  root: null
+  image_size: 96
+  classes: [airplane, automobile, bird, cat, deer, dog, frog, horse, ship, truck]
+model:
+  architecture: resnet18
+  pretrained: true
+  freeze_backbone: true
+  num_classes: 10
+train:
+  batch_size: 32
+  seed: 42
+  epochs: 10
+  learning_rate: 0.001
+  mixed_precision: true
+  gradient_accumulation_steps: 1
+  imbalance_fractions: null
+  class_weighted: false
+  weighted_sampler: false
+  focal_gamma: null
+  cifar_augment: true  # false allows the frozen-backbone feature cache
+eval:
+  batch_size: 64
+  num_workers: 0
