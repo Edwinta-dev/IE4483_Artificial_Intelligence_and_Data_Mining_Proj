@@ -5,12 +5,9 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
-import sys
 from pathlib import Path
 
 from PIL import Image
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from ie4483.cifar import CIFAR10Dataset
 from ie4483.proxy import PROXY_MARKER, write_proxy_marker

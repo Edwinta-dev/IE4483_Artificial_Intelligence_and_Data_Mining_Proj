@@ -3,11 +3,7 @@
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
 
 from ie4483.figures import model_architecture_figure, write_model_card
 from ie4483.model import build_model

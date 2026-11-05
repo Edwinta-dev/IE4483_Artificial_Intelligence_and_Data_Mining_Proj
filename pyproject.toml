@@ -7,7 +7,10 @@ name = "ie4483"
 version = "0.1.0"
 description = "IE4483 image classification project"
 requires-python = ">=3.10"
-dependencies = ["numpy", "torch", "PyYAML"]
+dependencies = ["numpy", "torch", "torchvision", "matplotlib", "Pillow", "PyYAML"]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ie4483"]

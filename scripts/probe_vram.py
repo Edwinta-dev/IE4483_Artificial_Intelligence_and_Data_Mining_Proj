@@ -3,14 +3,11 @@
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
 from typing import Any
 
 import torch
 import yaml
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from ie4483.model import build_model
 from ie4483.seed import seed_everything
