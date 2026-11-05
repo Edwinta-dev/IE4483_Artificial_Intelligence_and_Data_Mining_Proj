@@ -279,3 +279,32 @@ def test_weighted_sampler_applies_on_frozen_feature_cache_path(tmp_path, monkeyp
     config.train.weighted_sampler = True
     train(config, tmp_path / "runs")
     assert isinstance(seen[0].sampler, torch.utils.data.WeightedRandomSampler)
+
+
+def test_patience_tolerates_that_many_non_improving_epochs_before_stopping(tmp_path, monkeypatch):
+    import ie4483.train as training
+
+    class Tiny(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.head = torch.nn.Linear(2, 2)
+
+        def forward(self, x):
+            return self.head(x)
+
+    calls = 0
+
+    def epoch(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        # Validation (even calls) never improves after epoch 1.
+        return (1.0, 0.5) if calls % 2 else (0.5 + 0.1 * calls, 0.5)
+
+    monkeypatch.setattr(training, "_epoch", epoch)
+    cfg = Config(train=TrainConfig(batch_size=2, mixed_precision=False, epochs=10, scheduler="none", patience=2),
+                 eval=EvalConfig(batch_size=2))
+    data = (torch.ones(2, 2), torch.tensor([0, 1]))
+    loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(*data), batch_size=2)
+    training._fit(Tiny(), loader, loader, cfg, tmp_path, torch.device("cpu"))
+    rows = list(csv.DictReader((tmp_path / "metrics.csv").open(encoding="utf-8")))
+    assert len(rows) == 4  # epoch 1 sets the minimum; epochs 2-3 are tolerated; epoch 4 exceeds patience=2

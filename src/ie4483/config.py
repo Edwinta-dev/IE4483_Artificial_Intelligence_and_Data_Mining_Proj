@@ -84,6 +84,7 @@ class TrainConfig:
     step_size: int = 5
     gamma: float = 0.1
     warmup_epochs: int = 0
+    # Early stopping: stop once validation loss has failed to improve for more than this many epochs in a row.
     patience: int = 3
     # Loss and class imbalance.
     label_smoothing: float = 0.0

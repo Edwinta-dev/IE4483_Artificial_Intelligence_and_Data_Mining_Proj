@@ -51,7 +51,13 @@ def _manifest(dataset) -> list[tuple[str, int]]:
     return [(str(path), int(label)) for path, label in dataset.samples]
 
 
-def _epoch(model, loader, criterion, optimizer, device, scaler, accumulation, train: bool) -> tuple[float, float]:
+def _epoch(model, loader, criterion, device, *, optimizer=None, scaler=None, accumulation=1,
+           amp=False) -> tuple[float, float]:
+    """One pass over ``loader``; trains when an ``optimizer`` is given, otherwise only evaluates.
+
+    Returns ``(mean loss, accuracy)``. ``amp`` enables CUDA autocast (and ``scaler`` scales the training loss).
+    """
+    train = optimizer is not None
     model.train(train)
     loss_sum = 0.0
     correct = 0
@@ -60,7 +66,7 @@ def _epoch(model, loader, criterion, optimizer, device, scaler, accumulation, tr
     with context():
         for step, (images, labels) in enumerate(loader):
             images, labels = images.to(device), labels.to(device)
-            with torch.autocast(device_type="cuda", enabled=(device.type == "cuda" and scaler.is_enabled())):
+            with torch.autocast(device_type="cuda", enabled=amp):
                 logits = model(images)
                 loss = criterion(logits, labels)
             if train:
@@ -145,7 +151,8 @@ def _fit(model, train_loader, val_loader, cfg, run_dir, device, *, checkpoint_mo
         criterion = FocalLoss(cfg.train.focal_gamma, weight_tensor, cfg.train.label_smoothing)
     else:
         criterion = nn.CrossEntropyLoss(weight=weight_tensor, label_smoothing=cfg.train.label_smoothing)
-    scaler = torch.amp.GradScaler("cuda", enabled=device.type == "cuda" and cfg.train.mixed_precision)
+    amp = device.type == "cuda" and cfg.train.mixed_precision
+    scaler = torch.amp.GradScaler("cuda", enabled=amp)
     checkpoint_path = run_dir / "last.pt"
     start_epoch, best_acc, min_val_loss, stale = 1, -1.0, math.inf, 0
     if resume:
@@ -168,13 +175,16 @@ def _fit(model, train_loader, val_loader, cfg, run_dir, device, *, checkpoint_mo
             writer.writerow(("epoch", "train_loss", "train_acc", "val_loss", "val_acc", "lr", "seconds"))
         for epoch in range(start_epoch, cfg.train.epochs + 1):
             if epoch <= cfg.train.warmup_epochs:
+                # Linear warmup written straight into the optimizer. The cosine scheduler captured its base rates
+                # at construction and is only stepped after warmup, so it still anneals from the full rate.
                 factor = epoch / max(1, cfg.train.warmup_epochs)
                 base_rates = [cfg.train.learning_rate] + ([cfg.train.backbone_learning_rate] if backbone_params else [])
                 for group, base_lr in zip(optimizer.param_groups, base_rates):
                     group["lr"] = base_lr * factor
             started = time.perf_counter()
-            train_loss, train_acc = _epoch(model, train_loader, criterion, optimizer, device, scaler, accumulation, True)
-            val_loss, val_acc = _epoch(model, val_loader, criterion, optimizer, device, scaler, accumulation, False)
+            train_loss, train_acc = _epoch(model, train_loader, criterion, device, optimizer=optimizer, scaler=scaler,
+                                           accumulation=accumulation, amp=amp)
+            val_loss, val_acc = _epoch(model, val_loader, criterion, device, amp=amp)
             lr = optimizer.param_groups[0]["lr"]
             writer.writerow((epoch, train_loss, train_acc, val_loss, val_acc, lr, time.perf_counter() - started))
             stream.flush()
@@ -183,6 +193,9 @@ def _fit(model, train_loader, val_loader, cfg, run_dir, device, *, checkpoint_mo
                 saved_model = checkpoint_model if checkpoint_model is not None else model
                 _atomic_save({"model": saved_model.state_dict(), "epoch": epoch, "val_acc": val_acc,
                               "val_loss": val_loss}, run_dir / "best.pt")
+            # Early stopping tracks validation *loss* (best.pt tracks accuracy). ``stale`` counts consecutive epochs
+            # without a new loss minimum; training stops once it exceeds ``patience`` (so patience=3 tolerates
+            # three such epochs and stops after the fourth, and patience=0 stops at the first regression).
             if val_loss < min_val_loss:
                 min_val_loss = val_loss
                 stale = 0
