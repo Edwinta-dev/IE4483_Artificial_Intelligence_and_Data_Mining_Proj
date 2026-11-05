@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import dataclasses
 from pathlib import Path
 
 from ie4483.config import load_config
@@ -28,13 +29,12 @@ def check_repeatable(config_path: str | Path, epochs: int, output: str | Path,
     if tolerance < 0:
         raise ValueError("tolerance must be non-negative")
     config = load_config(config_path, overrides)
-    config.train.epochs = epochs
     root = Path(output)
     seed = config.train.seed
     runs = []
     for index, run_seed in enumerate((seed, seed, seed + 1)):
-        config.train.seed = run_seed
-        runs.append(_metrics(train(config, root / f"run-{index}")))
+        run_config = dataclasses.replace(config, train=dataclasses.replace(config.train, epochs=epochs, seed=run_seed))
+        runs.append(_metrics(train(run_config, root / f"run-{index}")))
     common_epochs = set(runs[0]) & set(runs[1])
     if len(common_epochs) != epochs or set(runs[0]) != set(runs[1]):
         raise RuntimeError("same-seed runs produced different epoch counts")

@@ -308,3 +308,19 @@ def test_patience_tolerates_that_many_non_improving_epochs_before_stopping(tmp_p
     training._fit(Tiny(), loader, loader, cfg, tmp_path, torch.device("cpu"))
     rows = list(csv.DictReader((tmp_path / "metrics.csv").open(encoding="utf-8")))
     assert len(rows) == 4  # epoch 1 sets the minimum; epochs 2-3 are tolerated; epoch 4 exceeds patience=2
+
+
+def test_train_leaves_the_callers_config_untouched(tmp_path, monkeypatch):
+    import copy
+
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    _images(tmp_path, "train")
+    _images(tmp_path, "val")
+    config = Config(train=TrainConfig(batch_size=2, epochs=1, mixed_precision=False, class_weighted=True,
+                                      feature_cache="off"))
+    config.data.root = str(tmp_path)
+    config.data.image_size = 32
+    config.model.pretrained = False
+    before = copy.deepcopy(config)
+    train(config, tmp_path / "runs")
+    assert config == before  # e.g. computed class weights are not written back
