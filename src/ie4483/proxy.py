@@ -17,8 +17,16 @@ def write_proxy_marker(root: str | Path, *, seed: int, n_train: int, n_val: int)
     path = Path(root) / PROXY_MARKER
     path.write_text(
         "Stand-in CIFAR-10 cat/dog dataset. Do not report its metrics as Dogs vs Cats results.\n"
-        + json.dumps({"dataset": "CIFAR-10", "classes": {"cat": 3, "dog": 5}, "seed": seed,
-                      "n_train_per_class": n_train, "n_val_per_class": n_val}, sort_keys=True)
+        + json.dumps(
+            {
+                "dataset": "CIFAR-10",
+                "classes": {"cat": 3, "dog": 5},
+                "seed": seed,
+                "n_train_per_class": n_train,
+                "n_val_per_class": n_val,
+            },
+            sort_keys=True,
+        )
         + "\n",
         encoding="utf-8",
     )

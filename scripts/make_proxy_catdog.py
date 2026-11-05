@@ -5,19 +5,15 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
-import sys
 from pathlib import Path
 
 from PIL import Image
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from ie4483.cifar import CIFAR10Dataset
 from ie4483.proxy import PROXY_MARKER, write_proxy_marker
 
 
-def make_proxy(cifar_root: str | Path, out: str | Path, n_train: int = 4000,
-               n_val: int = 400, seed: int = 42) -> Path:
+def make_proxy(cifar_root: str | Path, out: str | Path, n_train: int = 4000, n_val: int = 400, seed: int = 42) -> Path:
     if n_train < 1 or n_val < 1:
         raise ValueError("n_train and n_val must be positive per-class counts")
     root = Path(out)
@@ -48,8 +44,15 @@ def make_proxy(cifar_root: str | Path, out: str | Path, n_train: int = 4000,
     for numeric_id, index in enumerate(test_ids, start=1):
         image = test.images[index]
         Image.fromarray(image, mode="RGB").save(test_folder / f"{numeric_id}.png")
-        rows.append(("test", "", f"{numeric_id}.png", str(test.source_indices[index]),
-                     hashlib.sha256(image.tobytes()).hexdigest()))
+        rows.append(
+            (
+                "test",
+                "",
+                f"{numeric_id}.png",
+                str(test.source_indices[index]),
+                hashlib.sha256(image.tobytes()).hexdigest(),
+            )
+        )
     write_proxy_marker(root, seed=seed, n_train=n_train, n_val=n_val)
     with (root / "manifest.csv").open("w", newline="", encoding="utf-8") as stream:
         writer = csv.writer(stream)

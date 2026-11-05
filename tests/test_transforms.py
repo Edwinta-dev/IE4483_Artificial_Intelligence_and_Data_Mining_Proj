@@ -53,10 +53,21 @@ def test_preview_command_writes_png(tmp_path):
     image_path = tmp_path / "input.png"
     Image.fromarray(np.full((24, 32, 3), 150, dtype=np.uint8)).save(image_path)
     output = tmp_path / "preview.png"
-    subprocess.run([
-        sys.executable, str(Path(__file__).parents[1] / "scripts" / "preview_augment.py"),
-        "--image", str(image_path), "--n", "3", "--config", str(BASE), "--output", str(output),
-    ], check=True)
+    subprocess.run(
+        [
+            sys.executable,
+            str(Path(__file__).parents[1] / "scripts" / "preview_augment.py"),
+            "--image",
+            str(image_path),
+            "--n",
+            "3",
+            "--config",
+            str(BASE),
+            "--output",
+            str(output),
+        ],
+        check=True,
+    )
     with Image.open(output) as preview:
         assert preview.format == "PNG"
         assert preview.width > 0 and preview.height > 0

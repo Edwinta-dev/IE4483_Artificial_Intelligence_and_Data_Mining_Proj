@@ -5,13 +5,10 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import sys
 from pathlib import Path
 from statistics import mean
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
-from ie4483.experiments import sweep
+from ie4483.experiments import default_sweep_output, sweep
 
 
 def write_report(rows: list[dict], report_path: Path) -> list[dict]:
@@ -32,28 +29,40 @@ def write_report(rows: list[dict], report_path: Path) -> list[dict]:
         latest_metrics = json.loads(latest.read_text(encoding="utf-8")) if latest.exists() else {}
         if validation.get("proxy") or latest_metrics.get("proxy"):
             raise ValueError(f"proxy run cannot be included in the real-data report: {run}")
-        results.append({
-            **row,
-            "epochs": len(metrics),
-            "seconds_per_epoch": mean(float(item["seconds"]) for item in metrics),
-            "best_val_accuracy": float(validation["accuracy"]),
-        })
+        results.append(
+            {
+                **row,
+                "epochs": len(metrics),
+                "seconds_per_epoch": mean(float(item["seconds"]) for item in metrics),
+                "best_val_accuracy": float(validation["accuracy"]),
+            }
+        )
     best = max(results, key=lambda item: item["best_val_accuracy"])
-    lines = ["# GPU baseline sweep results", "",
-             "| Backbone | Freeze mode | Seed | Best val accuracy | Epochs | Seconds per epoch | Run |",
-             "|---|---|---:|---:|---:|---:|---|"]
+    lines = [
+        "# GPU baseline sweep results",
+        "",
+        "| Backbone | Freeze mode | Seed | Best val accuracy | Epochs | Seconds per epoch | Run |",
+        "|---|---|---:|---:|---:|---:|---|",
+    ]
     for item in results:
         lines.append(
             f"| {item['model.architecture']} | {item['model.freeze_mode']} | {item['seed']} "
             f"| {item['best_val_accuracy']:.6f} | {item['epochs']} "
             f"| {item['seconds_per_epoch']:.2f} | `{item['run']}` |"
         )
-    lines.extend(["", (f"The **{best['model.architecture']} / {best['model.freeze_mode']}** configuration "
-                  f"had the top validation accuracy ({best['best_val_accuracy']:.6f}). It is selected "
-                  "as the baseline because it "
-                  "achieved the best validation result and had a lower compute cost than the "
-                  "fine-tuned configurations; this keeps later comparisons efficient without giving up "
-                  "measured validation accuracy.")])
+    lines.extend(
+        [
+            "",
+            (
+                f"The **{best['model.architecture']} / {best['model.freeze_mode']}** configuration "
+                f"had the top validation accuracy ({best['best_val_accuracy']:.6f}). It is selected "
+                "as the baseline because it "
+                "achieved the best validation result and had a lower compute cost than the "
+                "fine-tuned configurations; this keeps later comparisons efficient without giving up "
+                "measured validation accuracy."
+            ),
+        ]
+    )
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return results
@@ -63,13 +72,17 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sweep", required=True, help="sweep YAML file")
     parser.add_argument("--output", default=None, help="output folder (default runs/sweeps/<name>)")
-    parser.add_argument("--report", type=Path, default=None,
-                        help="also write a Markdown results table here (e.g. docs/sweep_results.md)")
+    parser.add_argument(
+        "--report",
+        type=Path,
+        default=None,
+        help="also write a Markdown results table here (e.g. docs/sweep_results.md)",
+    )
     args = parser.parse_args()
     rows = sweep(args.sweep, args.output)
     if args.report:
         write_report(rows, args.report)
-    print(f"Completed {len(rows)} seed runs; summary: {args.output or 'runs/sweeps/' + args.sweep.rsplit('/', 1)[-1].removesuffix('.yaml')}")
+    print(f"Completed {len(rows)} seed runs; summary: {args.output or default_sweep_output(args.sweep)}")
 
 
 if __name__ == "__main__":

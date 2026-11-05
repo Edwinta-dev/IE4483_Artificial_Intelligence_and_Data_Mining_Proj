@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 import torch
 from torch import nn
 from torchvision.models import ResNet18_Weights, ResNet50_Weights, resnet18, resnet50
+
+from ie4483.config import get_setting, resolve_freeze_mode
+from ie4483.validation import is_int, is_number
 
 _BACKBONES = {
     "resnet18": (resnet18, ResNet18_Weights.DEFAULT, 512),
@@ -17,13 +19,11 @@ _BACKBONES = {
 
 
 def _get(config: Any, key: str, default: Any = None) -> Any:
-    if isinstance(config, Mapping):
-        return config.get(key, default)
-    return getattr(config, key, default)
+    return get_setting(config, key, default=default)
 
 
 def _model_config(config: Any) -> Any:
-    return _get(config, "model", config)
+    return get_setting(config, "model", default=config)
 
 
 class _ResNetWithHead(nn.Module):
@@ -34,7 +34,8 @@ class _ResNetWithHead(nn.Module):
         self.head = head
         self.freeze_mode = freeze_mode
 
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+    def forward_features(self, inputs: torch.Tensor) -> torch.Tensor:
+        """Pooled backbone features, shape ``(batch, feature_dim)``."""
         features = self.backbone.conv1(inputs)
         features = self.backbone.bn1(features)
         features = self.backbone.relu(features)
@@ -43,8 +44,10 @@ class _ResNetWithHead(nn.Module):
         features = self.backbone.layer2(features)
         features = self.backbone.layer3(features)
         features = self.backbone.layer4(features)
-        features = self.backbone.avgpool(features)
-        return self.head(torch.flatten(features, 1))
+        return torch.flatten(self.backbone.avgpool(features), 1)
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        return self.head(self.forward_features(inputs))
 
     def train(self, mode: bool = True) -> _ResNetWithHead:
         super().train(mode)
@@ -84,15 +87,15 @@ def build_model(cfg: Any) -> nn.Module:
     num_classes = _get(config, "num_classes", 2)
     dropout = _get(config, "dropout", 0.0)
     hidden_dim = _get(config, "hidden_dim", None)
-    if isinstance(num_classes, bool) or not isinstance(num_classes, int) or num_classes < 1:
+    if not is_int(num_classes) or num_classes < 1:
         raise ValueError("num_classes must be a positive integer")
-    if isinstance(dropout, bool) or not isinstance(dropout, (int, float)) or not 0 <= dropout < 1:
+    if not is_number(dropout) or not 0 <= dropout < 1:
         raise ValueError("dropout must be in [0, 1)")
     layers: list[nn.Module] = []
     if dropout:
         layers.append(nn.Dropout(float(dropout)))
     if hidden_dim is not None:
-        if isinstance(hidden_dim, bool) or not isinstance(hidden_dim, int) or hidden_dim < 1:
+        if not is_int(hidden_dim) or hidden_dim < 1:
             raise ValueError("hidden_dim must be a positive integer or None")
         layers.extend((nn.Linear(feature_dim, hidden_dim), nn.ReLU(inplace=True)))
         if dropout:
@@ -103,11 +106,7 @@ def build_model(cfg: Any) -> nn.Module:
     layers.append(nn.Linear(input_dim, num_classes))
     backbone.fc = nn.Identity()
 
-    freeze_mode = _get(config, "freeze_mode", None)
-    if freeze_mode is None:
-        freeze_mode = "frozen" if _get(config, "freeze_backbone", True) else "full"
-    if freeze_mode not in {"frozen", "last_block", "full"}:
-        raise ValueError("freeze_mode must be 'frozen', 'last_block', or 'full'")
+    freeze_mode = resolve_freeze_mode(_get(config, "freeze_mode", None), _get(config, "freeze_backbone", True))
     model = _ResNetWithHead(backbone, feature_dim, nn.Sequential(*layers), freeze_mode)
     if freeze_mode == "frozen":
         for parameter in model.backbone.parameters():

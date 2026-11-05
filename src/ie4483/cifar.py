@@ -7,10 +7,11 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import torch
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
+
+from ie4483.data import default_transform
 
 CIFAR10_CLASSES = ("airplane", "automobile", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck")
 CIFAR10_MEAN = (0.4914, 0.4822, 0.4465)
@@ -38,8 +39,9 @@ def _batch(path: Path) -> tuple[np.ndarray, np.ndarray]:
 class CIFAR10Dataset(Dataset):
     """Labeled images from standard CIFAR-10 Python batches."""
 
-    def __init__(self, root: str | Path, split: str = "train", transform=None, seed: int = 42,
-                 val_fraction: float = 0.1) -> None:
+    def __init__(
+        self, root: str | Path, split: str = "train", transform=None, seed: int = 42, val_fraction: float = 0.1
+    ) -> None:
         self.root = Path(root) / "cifar-10-batches-py"
         self.transform = transform
         if split not in {"train", "val", "test"}:
@@ -69,16 +71,14 @@ class CIFAR10Dataset(Dataset):
     @property
     def samples(self) -> list[tuple[str, int]]:
         """Stable per-image identities for feature-cache keys."""
-        return [(f"cifar10/{'test' if self.split == 'test' else 'train'}/{int(i)}", int(label))
-                for i, label in zip(self.source_indices, self.labels)]
+        return [
+            (f"cifar10/{'test' if self.split == 'test' else 'train'}/{int(i)}", int(label))
+            for i, label in zip(self.source_indices, self.labels)
+        ]
 
     def __len__(self) -> int:
         return len(self.labels)
 
     def __getitem__(self, index: int) -> tuple[Any, int]:
         image = Image.fromarray(self.images[index], mode="RGB")
-        if self.transform:
-            image = self.transform(image)
-        else:
-            image = torch.from_numpy(np.array(image, copy=True)).permute(2, 0, 1).float().div_(255)
-        return image, int(self.labels[index])
+        return (self.transform or default_transform)(image), int(self.labels[index])

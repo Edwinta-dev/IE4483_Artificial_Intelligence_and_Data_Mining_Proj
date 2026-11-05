@@ -66,3 +66,17 @@ def test_custom_head_options() -> None:
     assert isinstance(model.head[0], nn.Dropout)
     assert isinstance(model.head[1], nn.Linear) and model.head[1].out_features == 16
     assert isinstance(model.head[-1], nn.Linear) and model.head[-1].out_features == 10
+
+
+def test_head_options_are_reachable_from_model_config_and_features_feed_the_head():
+    from ie4483.config import Config, ModelConfig, resolve_freeze_mode
+
+    config = Config(model=ModelConfig(pretrained=False, dropout=0.25, hidden_dim=16))
+    model = build_model(config).eval()
+    assert [type(layer).__name__ for layer in model.head] == ["Dropout", "Linear", "ReLU", "Dropout", "Linear"]
+    inputs = torch.zeros(1, 3, 32, 32)
+    features = model.forward_features(inputs)
+    assert features.shape == (1, model.feature_dim)
+    assert torch.equal(model.head(features), model(inputs))
+    assert resolve_freeze_mode(None, False) == "full"
+    assert resolve_freeze_mode("last_block", False) == "last_block"

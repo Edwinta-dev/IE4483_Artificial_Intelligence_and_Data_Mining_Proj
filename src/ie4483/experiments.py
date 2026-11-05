@@ -17,19 +17,21 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import yaml
 
+from ie4483.config import load_config
 from ie4483.evaluate import evaluate
-from ie4483.train import load_training_config, train
+from ie4483.train import train
 
 
 def _override(key: str, value: Any) -> str:
     return f"{key}={yaml.safe_dump(value, default_flow_style=True).strip()}"
 
 
-def _run_one(config_path: str | Path, seed: int, run_root: Path, overrides: list[str],
-             resume_dir: Path | None = None) -> tuple[Path, float]:
+def _run_one(
+    config_path: str | Path, seed: int, run_root: Path, overrides: list[str], resume_dir: Path | None = None
+) -> tuple[Path, float]:
     all_overrides = [*overrides, f"train.seed={seed}"]
-    config, extra = load_training_config(config_path, all_overrides)
-    run_dir = train(config, extra, run_root, resume=resume_dir)
+    config = load_config(config_path, all_overrides)
+    run_dir = train(config, run_root, resume=resume_dir)
     metrics = evaluate(run_dir, run_dir / "latest.json")
     return run_dir, float(metrics["accuracy"])
 
@@ -41,58 +43,67 @@ def _group_value(value: Any) -> Any:
     return value
 
 
+def _mean_std(values: list[float]) -> tuple[float, float]:
+    return mean(values), (stdev(values) if len(values) > 1 else 0.0)
+
+
+def _group_rows(rows: list[dict[str, Any]], dimensions: list[str]) -> dict[tuple[Any, ...], list[dict[str, Any]]]:
+    """Rows grouped by their (hashable) values for ``dimensions``, in first-seen order."""
+    grouped: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
+    for row in rows:
+        grouped.setdefault(tuple(_group_value(row.get(key)) for key in dimensions), []).append(row)
+    return grouped
+
+
 def _write_summary(rows: list[dict[str, Any]], output: Path, dimensions: list[str] | None = None) -> None:
+    """Write ``summary.csv`` and ``summary.md``: one line per seed, or one per parameter cell when swept."""
     output.mkdir(parents=True, exist_ok=True)
-    fields = (dimensions or []) + ["seed", "run", "val_accuracy"]
-    csv_rows = rows
+    dimensions = dimensions or []
+    grouped = _group_rows(rows, dimensions)
     if dimensions:
-        grouped: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
-        for row in rows:
-            grouped.setdefault(tuple(_group_value(row[key]) for key in dimensions), []).append(row)
         seed_ids = sorted({row["seed"] for row in rows})
         fields = dimensions + ["seed_count", "mean", "std"] + [f"seed_{seed}_accuracy" for seed in seed_ids]
         csv_rows = []
+        lines = [
+            "# Experiment summary",
+            "",
+            "| " + " | ".join([*dimensions, "Seeds", "Mean validation accuracy ± std"]) + " |",
+            "|" + "|".join(["---"] * (len(dimensions) + 2)) + "|",
+        ]
         for key, entries in grouped.items():
             values = [float(entry["val_accuracy"]) for entry in entries]
-            csv_rows.append({
-                **dict(zip(dimensions, key)),
-                "seed_count": len(values),
-                "mean": mean(values),
-                "std": stdev(values) if len(values) > 1 else 0.0,
-                **{f"seed_{entry['seed']}_accuracy": entry["val_accuracy"] for entry in entries},
-            })
-    elif rows:
+            average, spread = _mean_std(values)
+            csv_rows.append(
+                {
+                    **dict(zip(dimensions, key)),
+                    "seed_count": len(values),
+                    "mean": average,
+                    "std": spread,
+                    **{f"seed_{entry['seed']}_accuracy": entry["val_accuracy"] for entry in entries},
+                }
+            )
+            lines.append("| " + " | ".join(map(str, [*key, len(values), f"{average:.6f} ± {spread:.6f}"])) + " |")
+    else:
+        fields = ["seed", "run", "val_accuracy"]
         values = [float(row["val_accuracy"]) for row in rows]
-        spread = stdev(values) if len(values) > 1 else 0.0
-        fields += ["mean", "std"]
-        csv_rows = [{**row, "mean": mean(values), "std": spread} for row in rows]
+        csv_rows = rows
+        lines = ["# Experiment summary", "", "| Seed | Validation accuracy | Run |", "|---:|---:|---|"]
+        lines.extend(f"| {row['seed']} | {float(row['val_accuracy']):.6f} | {row['run']} |" for row in rows)
+        if rows:
+            average, spread = _mean_std(values)
+            fields += ["mean", "std"]
+            csv_rows = [{**row, "mean": average, "std": spread} for row in rows]
+            lines.extend(["", f"Mean: {average:.6f}; standard deviation: {spread:.6f}"])
     with (output / "summary.csv").open("w", newline="", encoding="utf-8") as stream:
         writer = csv.DictWriter(stream, fieldnames=fields)
         writer.writeheader()
         writer.writerows(csv_rows)
-    grouped: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
-    for row in rows:
-        grouped.setdefault(tuple(_group_value(row.get(key)) for key in (dimensions or [])), []).append(row)
-    lines = ["# Experiment summary", ""]
-    if dimensions:
-        lines.append("| " + " | ".join([*dimensions, "Seeds", "Mean validation accuracy ± std"]) + " |")
-        lines.append("|" + "|".join(["---"] * (len(dimensions) + 2)) + "|")
-        for key, entries in grouped.items():
-            values = [float(item["val_accuracy"]) for item in entries]
-            spread = stdev(values) if len(values) > 1 else 0.0
-            lines.append("| " + " | ".join(map(str, [*key, len(values), f"{mean(values):.6f} ± {spread:.6f}"])) + " |")
-    else:
-        lines.extend(["| Seed | Validation accuracy | Run |", "|---:|---:|---|"])
-        for row in rows:
-            lines.append(f"| {row['seed']} | {float(row['val_accuracy']):.6f} | {row['run']} |")
-        values = [float(row["val_accuracy"]) for row in rows]
-        spread = stdev(values) if len(values) > 1 else 0.0
-        lines.extend(["", f"Mean: {mean(values):.6f}; standard deviation: {spread:.6f}"])
     (output / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def run_seeds(config_path: str | Path, seeds: list[int], output: str | Path,
-              overrides: list[str] | None = None) -> list[dict[str, Any]]:
+def run_seeds(
+    config_path: str | Path, seeds: list[int], output: str | Path, overrides: list[str] | None = None
+) -> list[dict[str, Any]]:
     """Train and evaluate one run per seed, saving per-seed and aggregate metrics."""
     if not seeds:
         raise ValueError("at least one seed is required")
@@ -118,18 +129,35 @@ def _partial_run(seed_dir: Path) -> Path | None:
     return runs[-1] if runs else None
 
 
+def default_sweep_output(sweep_path: str | Path) -> Path:
+    """Where a sweep writes its runs when no output folder is given."""
+    return Path("runs") / "sweeps" / Path(sweep_path).stem
+
+
+def _resolve_config(spec_path: Path, configured: str | Path) -> Path:
+    """Resolve a sweep's ``config`` value: as given (cwd-relative), else relative to the sweep's repo root."""
+    candidate = Path(configured)
+    if candidate.is_absolute() or candidate.exists():
+        return candidate
+    # Sweep specs live in <root>/configs/sweeps/, so the repository root is three levels up.
+    from_root = spec_path.resolve().parents[2] / candidate
+    if from_root.exists():
+        return from_root
+    raise FileNotFoundError(f"sweep config not found: {configured} (named in {spec_path})")
+
+
 def sweep(sweep_path: str | Path, output: str | Path | None = None) -> list[dict[str, Any]]:
     """Execute each parameter combination and resume completed seed runs."""
     spec_path = Path(sweep_path)
     spec = yaml.safe_load(spec_path.read_text(encoding="utf-8")) or {}
-    config_path = (spec_path.parent.parent.parent / spec.get("config", "base.yaml")).resolve()
-    # A config path can also be explicitly relative to the current directory.
-    configured = Path(spec.get("config", "configs/base.yaml"))
-    if configured.exists():
-        config_path = configured
+    config_path = _resolve_config(spec_path, spec.get("config", "configs/base.yaml"))
     parameters = spec.get("parameters")
     seeds = spec.get("seeds")
-    if not isinstance(parameters, dict) or not parameters or not all(isinstance(v, list) and v for v in parameters.values()):
+    if (
+        not isinstance(parameters, dict)
+        or not parameters
+        or not all(isinstance(v, list) and v for v in parameters.values())
+    ):
         raise ValueError("sweep parameters must map config keys to non-empty lists")
     if not isinstance(seeds, list) or not seeds:
         raise ValueError("sweep seeds must be a non-empty list")
@@ -138,7 +166,7 @@ def sweep(sweep_path: str | Path, output: str | Path | None = None) -> list[dict
         raise ValueError("sweep overrides must be a list of KEY=VALUE strings")
     dimensions = list(parameters)
     combinations = list(itertools.product(*(parameters[key] for key in dimensions)))
-    output = Path(output or Path("runs") / "sweeps" / spec_path.stem)
+    output = Path(output) if output else default_sweep_output(spec_path)
     rows: list[dict[str, Any]] = []
     for values in combinations:
         cell = dict(zip(dimensions, values))
@@ -152,30 +180,20 @@ def sweep(sweep_path: str | Path, output: str | Path | None = None) -> list[dict
                 accuracy = float(metrics["accuracy"])
             else:
                 overrides = [*shared_overrides, *(_override(key, value) for key, value in cell.items())]
-                run_dir, accuracy = _run_one(config_path, int(seed), seed_dir, overrides,
-                                             _partial_run(seed_dir))
+                run_dir, accuracy = _run_one(config_path, int(seed), seed_dir, overrides, _partial_run(seed_dir))
             rows.append({**cell, "seed": seed, "run": str(run_dir), "val_accuracy": accuracy})
         _write_summary(rows, output, dimensions)
-    # Sort cells by average validation accuracy; ties retain their declared grid order.
-    def cell_key(values):
-        return tuple(_group_value(value) for value in values)
-
-    def row_key(row):
-        return cell_key(row[d] for d in dimensions)
-
-    cell_scores = {}
-    for values in combinations:
-        selected = [float(row["val_accuracy"]) for row in rows if row_key(row) == cell_key(values)]
-        cell_scores[cell_key(values)] = mean(selected)
-    ordered = sorted(combinations, key=lambda values: cell_scores[cell_key(values)], reverse=True)
-    ordered_rows = [row for values in ordered for row in rows if row_key(row) == cell_key(values)]
+    # Order cells by mean validation accuracy; ties keep their declared grid order.
+    by_cell = _group_rows(rows, dimensions)
+    cells = sorted(
+        by_cell, key=lambda cell: _mean_std([float(row["val_accuracy"]) for row in by_cell[cell]])[0], reverse=True
+    )
+    ordered_rows = [row for cell in cells for row in by_cell[cell]]
     _write_summary(ordered_rows, output, dimensions)
-    means = [cell_scores[cell_key(values)] for values in ordered]
-    errors = []
-    for values in ordered:
-        scores = [float(row["val_accuracy"]) for row in rows if row_key(row) == cell_key(values)]
-        errors.append(stdev(scores) if len(scores) > 1 else 0.0)
-    labels = [", ".join(f"{key}={value}" for key, value in zip(dimensions, values)) for values in ordered]
+    stats = [_mean_std([float(row["val_accuracy"]) for row in by_cell[cell]]) for cell in cells]
+    means, errors = [average for average, _ in stats], [spread for _, spread in stats]
+    raw_values = {tuple(_group_value(value) for value in values): values for values in combinations}
+    labels = [", ".join(f"{key}={value}" for key, value in zip(dimensions, raw_values[cell])) for cell in cells]
     fig, ax = plt.subplots(figsize=(max(6, len(labels) * 1.1), 4))
     ax.bar(range(len(labels)), means, yerr=errors, capsize=4)
     ax.set(xticks=range(len(labels)), xticklabels=labels, ylabel="Validation accuracy", xlabel="Parameters")

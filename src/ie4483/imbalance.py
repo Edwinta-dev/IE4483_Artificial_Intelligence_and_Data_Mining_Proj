@@ -44,8 +44,7 @@ def balanced_sampler(labels, seed: int) -> WeightedRandomSampler:
     if torch.any(counts == 0):
         raise ValueError("balanced sampler requires at least one training example per class")
     weights = 1.0 / counts[labels].float()
-    return WeightedRandomSampler(weights, len(labels), replacement=True,
-                                 generator=torch.Generator().manual_seed(seed))
+    return WeightedRandomSampler(weights, len(labels), replacement=True, generator=torch.Generator().manual_seed(seed))
 
 
 class FocalLoss(nn.Module):
@@ -58,8 +57,9 @@ class FocalLoss(nn.Module):
         self.label_smoothing = label_smoothing
 
     def forward(self, logits, target):
-        ce = nn.functional.cross_entropy(logits, target, weight=self.weight,
-                                         label_smoothing=self.label_smoothing, reduction="none")
+        ce = nn.functional.cross_entropy(
+            logits, target, weight=self.weight, label_smoothing=self.label_smoothing, reduction="none"
+        )
         if self.gamma == 0:
             return ce.mean()
         true_class_probability = logits.softmax(dim=1).gather(1, target.unsqueeze(1)).squeeze(1)
@@ -67,5 +67,7 @@ class FocalLoss(nn.Module):
 
 
 def write_class_counts(path: str | Path, counts: dict[int | str, int]) -> None:
-    Path(path).write_text(json.dumps({str(k): v for k, v in sorted(counts.items(), key=lambda item: str(item[0]))}, indent=2) + "\n",
-                          encoding="utf-8")
+    Path(path).write_text(
+        json.dumps({str(k): v for k, v in sorted(counts.items(), key=lambda item: str(item[0]))}, indent=2) + "\n",
+        encoding="utf-8",
+    )

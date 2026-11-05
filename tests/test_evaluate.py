@@ -30,13 +30,16 @@ def test_evaluate_writes_validation_artifacts_and_result_contract(tmp_path, monk
         encoding="utf-8",
     )
     config = load_config(config_file)
-    run = train(config, {"feature_cache": "off", "patience": 2}, tmp_path / "runs")
+    config.train.feature_cache = "off"
+    config.train.patience = 2
+    run = train(config, tmp_path / "runs")
     results = tmp_path / "results" / "latest.json"
     metrics = evaluate(run, results)
 
     expected = {"val_metrics.json", "val_predictions.csv", "confusion_matrix.png"}
-    expected.update(f"gallery_{kind}_{name}.png" for kind in ("correct", "wrong", "uncertain")
-                    for name in ("cat", "dog"))
+    expected.update(
+        f"gallery_{kind}_{name}.png" for kind in ("correct", "wrong", "uncertain") for name in ("cat", "dog")
+    )
     assert expected <= {path.name for path in run.iterdir()}
     with (run / "val_predictions.csv").open(newline="", encoding="utf-8") as stream:
         rows = list(csv.DictReader(stream))
@@ -44,7 +47,11 @@ def test_evaluate_writes_validation_artifacts_and_result_contract(tmp_path, monk
     assert metrics["accuracy"] == accuracy
     assert json.loads((run / "val_metrics.json").read_text(encoding="utf-8")) == metrics
     assert json.loads(results.read_text(encoding="utf-8")) == {
-        "metric": "accuracy", "value": accuracy, "seed": 13, "split": "val", "notes": run.name,
+        "metric": "accuracy",
+        "value": accuracy,
+        "seed": 13,
+        "split": "val",
+        "notes": run.name,
     }
 
 
@@ -55,10 +62,46 @@ def test_gallery_uses_loader_for_cifar_pseudo_paths(tmp_path):
     from ie4483.evaluate import _gallery
 
     pixels = np.zeros((2, 32, 32, 3), dtype=np.uint8)
-    records = [{"path": f"cifar10/train/{i}", "index": i, "true": 0, "predicted": p, "p_dog": 0.2,
-                "true_name": "airplane", "predicted_name": "airplane" if p == 0 else "automobile",
-                "confidence": 0.8} for i, p in enumerate((0, 1))]
+    records = [
+        {
+            "path": f"cifar10/train/{i}",
+            "index": i,
+            "true": 0,
+            "predicted": p,
+            "p_dog": 0.2,
+            "true_name": "airplane",
+            "predicted_name": "airplane" if p == 0 else "automobile",
+            "confidence": 0.8,
+        }
+        for i, p in enumerate((0, 1))
+    ]
     for kind in ("correct", "wrong", "uncertain"):
         out = tmp_path / f"{kind}.png"
         _gallery(records, kind, "airplane", out, lambda r: Image.fromarray(pixels[r["index"]], mode="RGB"))
         assert out.exists()
+
+
+def test_multiclass_gallery_orders_uncertain_by_top_class_confidence(tmp_path):
+    from ie4483.evaluate import _gallery
+
+    records = [
+        {
+            "path": str(i),
+            "index": i,
+            "true": 0,
+            "predicted": 0,
+            "true_name": "a",
+            "predicted_name": "a",
+            "confidence": confidence,
+        }
+        for i, confidence in enumerate((0.9, 0.2, 0.5))
+    ]
+    shown = []
+    _gallery(
+        records,
+        "uncertain",
+        "a",
+        tmp_path / "g.png",
+        lambda record: shown.append(record["index"]) or Image.new("RGB", (4, 4)),
+    )
+    assert shown == [1, 2, 0]

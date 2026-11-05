@@ -5,19 +5,25 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import sys
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
+from ie4483 import figures, proxy
+from ie4483.config import load_config, resolve_freeze_mode
 
-from ie4483 import figures, proxy, train
-
-FIELDS = ("run", "backbone", "freeze_mode", "learning_rate", "augmentation", "epochs_run",
-          "best_val_accuracy", "time_per_epoch", "proxy")
+FIELDS = (
+    "run",
+    "backbone",
+    "freeze_mode",
+    "learning_rate",
+    "augmentation",
+    "epochs_run",
+    "best_val_accuracy",
+    "time_per_epoch",
+    "proxy",
+)
 
 
 def _summarize_run(run_dir: Path) -> dict[str, Any]:
@@ -26,12 +32,10 @@ def _summarize_run(run_dir: Path) -> dict[str, Any]:
     if not metrics:
         raise ValueError(f"run has no epoch metrics: {run_dir}")
     config_values = yaml.safe_load((run_dir / "config.yaml").read_text(encoding="utf-8")) or {}
-    typed_config, _ = train.load_training_config(run_dir / "config.yaml")
+    typed_config = load_config(run_dir / "config.yaml")
     model = config_values.get("model", {})
     training_values = config_values.get("train", {})
-    freeze_mode = model.get("freeze_mode")
-    if freeze_mode is None:
-        freeze_mode = "frozen" if model.get("freeze_backbone", True) else "full"
+    freeze_mode = resolve_freeze_mode(model.get("freeze_mode"), model.get("freeze_backbone", True))
     best_index = max(range(len(metrics)), key=lambda index: float(metrics[index]["val_acc"]))
     best = metrics[best_index]
     is_proxy = proxy.is_proxy_dataset(typed_config.data_root)
@@ -42,8 +46,8 @@ def _summarize_run(run_dir: Path) -> dict[str, Any]:
         "freeze_mode": freeze_mode,
         "learning_rate": training_values.get("learning_rate", typed_config.train.learning_rate),
         "augmentation": (run_dir / "transforms.txt").read_text(encoding="utf-8").strip()
-        if (run_dir / "transforms.txt").is_file() else yaml.safe_dump(config_values.get("augment", {}),
-                                                                       sort_keys=True).strip(),
+        if (run_dir / "transforms.txt").is_file()
+        else yaml.safe_dump(config_values.get("augment", {}), sort_keys=True).strip(),
         "epochs_run": len(metrics),
         "best_val_accuracy": float(best["val_acc"]),
         "time_per_epoch": sum(float(row["seconds"]) for row in metrics) / len(metrics),
@@ -65,15 +69,29 @@ def report_figures(runs: list[Path], output: Path) -> list[dict[str, Any]]:
         writer = csv.DictWriter(stream, fieldnames=FIELDS)
         writer.writeheader()
         writer.writerows({field: summary[field] for field in FIELDS} for summary in summaries)
-    headers = ["Run", "Backbone", "Freeze mode", "LR", "Augmentation", "Epochs run",
-               "Best val acc", "Time per epoch (s)"]
-    lines = ["# Run comparison", "", "| " + " | ".join(headers) + " |",
-             "|" + "|".join(["---"] * len(headers)) + "|"]
+    headers = [
+        "Run",
+        "Backbone",
+        "Freeze mode",
+        "LR",
+        "Augmentation",
+        "Epochs run",
+        "Best val acc",
+        "Time per epoch (s)",
+    ]
+    lines = ["# Run comparison", "", "| " + " | ".join(headers) + " |", "|" + "|".join(["---"] * len(headers)) + "|"]
     for summary in summaries:
         run_name = summary["run"] + (" (PROXY)" if summary["proxy"] else "")
-        values = [run_name, summary["backbone"], summary["freeze_mode"], f"{summary['learning_rate']:g}",
-                  str(summary["augmentation"]).replace("|", "\\|"), summary["epochs_run"],
-                  f"{summary['best_val_accuracy']:.6f}", f"{summary['time_per_epoch']:.3f}"]
+        values = [
+            run_name,
+            summary["backbone"],
+            summary["freeze_mode"],
+            f"{summary['learning_rate']:g}",
+            str(summary["augmentation"]).replace("|", "\\|"),
+            summary["epochs_run"],
+            f"{summary['best_val_accuracy']:.6f}",
+            f"{summary['time_per_epoch']:.3f}",
+        ]
         lines.append("| " + " | ".join(map(str, values)) + " |")
     (output / "comparison.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     return summaries

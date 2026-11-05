@@ -10,14 +10,10 @@ from scripts import predict as predict_script
 
 
 def test_prediction_csvs_sort_ids_and_match_submission_format(tmp_path):
-    submission.write_prediction_csvs(
-        tmp_path, [10, 2], [[0.2, 0.8], [0.9, 0.1]], ["cat", "dog"], 2
-    )
+    submission.write_prediction_csvs(tmp_path, [10, 2], [[0.2, 0.8], [0.9, 0.1]], ["cat", "dog"], 2)
     assert (tmp_path / "submission.csv").read_bytes() == b"id,label\n2,0\n10,1\n"
     with (tmp_path / "test_predictions.csv").open(newline="", encoding="utf-8") as stream:
-        assert list(csv.reader(stream)) == [
-            ["id", "p_cat", "p_dog"], ["2", "0.9", "0.1"], ["10", "0.2", "0.8"]
-        ]
+        assert list(csv.reader(stream)) == [["id", "p_cat", "p_dog"], ["2", "0.9", "0.1"], ["10", "0.2", "0.8"]]
 
 
 @pytest.mark.parametrize(
@@ -42,8 +38,10 @@ def test_predict_reads_generated_test_images_and_writes_sorted_rows(tmp_path, mo
     run.mkdir()
     (run / "config.yaml").write_text("placeholder", encoding="utf-8")
     config = SimpleNamespace(
-        data=SimpleNamespace(classes=["cat", "dog"]), data_root=tmp_path,
-        train=SimpleNamespace(seed=7), eval=SimpleNamespace(batch_size=2),
+        data=SimpleNamespace(classes=["cat", "dog"]),
+        data_root=tmp_path,
+        train=SimpleNamespace(seed=7),
+        eval=SimpleNamespace(batch_size=2, num_workers=0),
     )
 
     class TinyModel(torch.nn.Module):
@@ -51,12 +49,17 @@ def test_predict_reads_generated_test_images_and_writes_sorted_rows(tmp_path, mo
             mean = images.mean(dim=(1, 2, 3))
             return torch.stack((1 - mean, mean), dim=1)
 
-    monkeypatch.setattr(predict_script, "load_training_config", lambda _: (config, {"num_workers": 0}))
-    monkeypatch.setattr(predict_script, "build_eval_transform", lambda _: lambda image: torch.from_numpy(
-        __import__("numpy").array(image, copy=True)
-    ).permute(2, 0, 1).float().div_(255))
-    monkeypatch.setattr(predict_script, "build_model", lambda _: TinyModel())
-    monkeypatch.setattr(predict_script.torch, "load", lambda *args, **kwargs: {"model": {}})
+    monkeypatch.setattr(predict_script, "load_config", lambda _: config)
+    monkeypatch.setattr(
+        predict_script,
+        "build_eval_transform",
+        lambda _: (
+            lambda image: (
+                torch.from_numpy(__import__("numpy").array(image, copy=True)).permute(2, 0, 1).float().div_(255)
+            )
+        ),
+    )
+    monkeypatch.setattr(predict_script, "load_best_model", lambda *args: TinyModel().eval())
     monkeypatch.setattr(predict_script, "seed_everything", lambda _: None)
     predict_script.predict(str(run), tta=tta)
     assert (run / "submission.csv").read_bytes().startswith(b"id,label\n2,")

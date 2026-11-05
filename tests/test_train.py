@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import csv
-from types import SimpleNamespace
 
 import pytest
 import torch
 from PIL import Image
 
-from ie4483.config import load_config
+from ie4483.config import Config, EvalConfig, TrainConfig, load_config
 from ie4483.features import extract_features, feature_cache_key, load_or_create_cache
 from ie4483.model import build_model
 from ie4483.train import train
@@ -36,7 +35,7 @@ def test_two_epoch_training_writes_artifacts_and_is_seeded(tmp_path, monkeypatch
         encoding="utf-8",
     )
     config = load_config(config_file)
-    extra = {"patience": 0, "feature_cache": "auto"}
+    config.train.patience = 0
     extraction_calls = 0
     original_extract = training.extract_features
 
@@ -46,8 +45,8 @@ def test_two_epoch_training_writes_artifacts_and_is_seeded(tmp_path, monkeypatch
         return original_extract(*args, **kwargs)
 
     monkeypatch.setattr(training, "extract_features", counted_extract)
-    run_a = train(config, extra, tmp_path / "runs")
-    run_b = train(config, extra, tmp_path / "runs")
+    run_a = train(config, tmp_path / "runs")
+    run_b = train(config, tmp_path / "runs")
     assert extraction_calls == 2
     for run in (run_a, run_b):
         assert {"config.yaml", "transforms.txt", "manifest.csv", "metrics.csv", "best.pt"} <= {
@@ -89,7 +88,9 @@ def test_cached_features_preserve_head_outputs(monkeypatch):
     images = torch.rand(2, 3, 32, 32)
     from torch.utils.data import DataLoader, TensorDataset
 
-    features, labels = extract_features(model, DataLoader(TensorDataset(images, torch.tensor([0, 1]))), torch.device("cpu"))
+    features, labels = extract_features(
+        model, DataLoader(TensorDataset(images, torch.tensor([0, 1]))), torch.device("cpu")
+    )
     torch.testing.assert_close(model(images), model.head(features), rtol=1e-5, atol=1e-6)
     assert labels.tolist() == [0, 1]
 
@@ -115,17 +116,28 @@ def test_patience_zero_stops_on_first_validation_loss_regression(tmp_path, monke
         return (0.5 if calls == 2 else 0.6), 0.5
 
     monkeypatch.setattr(training, "_epoch", epoch)
-    cfg = SimpleNamespace(
-        train=SimpleNamespace(batch_size=2, learning_rate=0.01, gradient_accumulation_steps=1,
-                              mixed_precision=False, epochs=4),
-        eval=SimpleNamespace(batch_size=2),
+    cfg = Config(
+        train=TrainConfig(
+            batch_size=2,
+            learning_rate=0.01,
+            mixed_precision=False,
+            epochs=4,
+            optimizer="adamw",
+            weight_decay=0.0,
+            scheduler="none",
+            patience=0,
+        ),
+        eval=EvalConfig(batch_size=2),
     )
     data = (torch.ones(2, 2), torch.tensor([0, 1]))
-    training._fit(Tiny(), torch.utils.data.DataLoader(torch.utils.data.TensorDataset(*data), batch_size=2),
-                  torch.utils.data.DataLoader(torch.utils.data.TensorDataset(*data), batch_size=2), cfg,
-                  {"optimizer": "adamw", "weight_decay": 0.0, "scheduler": "none", "patience": 0,
-                   "class_weights": None, "label_smoothing": 0.0, "warmup_epochs": 0},
-                  tmp_path, torch.device("cpu"))
+    training._fit(
+        Tiny(),
+        torch.utils.data.DataLoader(torch.utils.data.TensorDataset(*data), batch_size=2),
+        torch.utils.data.DataLoader(torch.utils.data.TensorDataset(*data), batch_size=2),
+        cfg,
+        tmp_path,
+        torch.device("cpu"),
+    )
     rows = list(csv.DictReader((tmp_path / "metrics.csv").open(encoding="utf-8")))
     assert len(rows) == 2
 
@@ -142,18 +154,30 @@ def test_cosine_schedule_reaches_minimum_after_final_warmup_adjusted_epoch(tmp_p
             return self.head(x)
 
     monkeypatch.setattr(training, "_epoch", lambda *args, **kwargs: (1.0, 0.5))
-    cfg = SimpleNamespace(
-        train=SimpleNamespace(batch_size=2, learning_rate=0.1, gradient_accumulation_steps=1,
-                              mixed_precision=False, epochs=4),
-        eval=SimpleNamespace(batch_size=2),
+    cfg = Config(
+        train=TrainConfig(
+            batch_size=2,
+            learning_rate=0.1,
+            mixed_precision=False,
+            epochs=4,
+            optimizer="adamw",
+            weight_decay=0.0,
+            scheduler="cosine",
+            patience=10,
+            warmup_epochs=1,
+        ),
+        eval=EvalConfig(batch_size=2),
     )
     data = (torch.ones(2, 2), torch.tensor([0, 1]))
-    training._fit(Tiny(), torch.utils.data.DataLoader(torch.utils.data.TensorDataset(*data), batch_size=2),
-                  torch.utils.data.DataLoader(torch.utils.data.TensorDataset(*data), batch_size=2), cfg,
-                  {"optimizer": "adamw", "weight_decay": 0.0, "scheduler": "cosine", "patience": 10,
-                   "class_weights": None, "label_smoothing": 0.0, "warmup_epochs": 1},
-                  tmp_path, torch.device("cpu"))
-    checkpoint = torch.load(tmp_path / "last.pt", map_location="cpu", weights_only=False)
+    training._fit(
+        Tiny(),
+        torch.utils.data.DataLoader(torch.utils.data.TensorDataset(*data), batch_size=2),
+        torch.utils.data.DataLoader(torch.utils.data.TensorDataset(*data), batch_size=2),
+        cfg,
+        tmp_path,
+        torch.device("cpu"),
+    )
+    checkpoint = torch.load(tmp_path / "last.pt", map_location="cpu", weights_only=True)
     assert checkpoint["scheduler"]["T_max"] == 3
     assert checkpoint["scheduler"]["last_epoch"] == 3
     assert checkpoint["optimizer"]["param_groups"][0]["lr"] == pytest.approx(0.0)
@@ -171,8 +195,11 @@ def test_weighted_sampler_and_class_weights_work_on_image_folders(tmp_path, monk
         "eval:\n  batch_size: 2\n",
         encoding="utf-8",
     )
-    extra = {"feature_cache": "off", "weighted_sampler": True, "class_weighted": True}
-    run = train(load_config(config_file), extra, tmp_path / "runs")
+    config = load_config(config_file)
+    config.train.feature_cache = "off"
+    config.train.weighted_sampler = True
+    config.train.class_weighted = True
+    run = train(config, tmp_path / "runs")
     assert (run / "best.pt").is_file()
 
 
@@ -191,8 +218,9 @@ def test_interrupted_training_resumes_with_matching_weights_and_metrics(tmp_path
         encoding="utf-8",
     )
     config = load_config(config_file)
-    extra = {"feature_cache": "off", "patience": 10}
-    straight = train(config, extra, tmp_path / "straight")
+    config.train.feature_cache = "off"
+    config.train.patience = 10
+    straight = train(config, tmp_path / "straight")
 
     original_save = training._atomic_save
     last_saves = 0
@@ -207,14 +235,14 @@ def test_interrupted_training_resumes_with_matching_weights_and_metrics(tmp_path
 
     monkeypatch.setattr(training, "_atomic_save", stop_after_epoch_one)
     try:
-        train(config, extra, tmp_path / "interrupted")
+        train(config, tmp_path / "interrupted")
     except RuntimeError as error:
         assert str(error) == "simulated interruption"
     else:
         raise AssertionError("training did not stop at the simulated interruption")
     partial = next((tmp_path / "interrupted").iterdir())
     monkeypatch.setattr(training, "_atomic_save", original_save)
-    resumed = train(config, extra, tmp_path / "interrupted", resume=partial)
+    resumed = train(config, tmp_path / "interrupted", resume=partial)
 
     straight_rows = list(csv.DictReader((straight / "metrics.csv").open(encoding="utf-8")))
     resumed_rows = list(csv.DictReader((resumed / "metrics.csv").open(encoding="utf-8")))
@@ -222,13 +250,19 @@ def test_interrupted_training_resumes_with_matching_weights_and_metrics(tmp_path
     for expected, actual in zip(straight_rows, resumed_rows):
         for key in ("train_loss", "train_acc", "val_loss", "val_acc", "lr"):
             assert float(actual[key]) == pytest.approx(float(expected[key]), abs=1e-7)
-    torch.testing.assert_close(torch.load(straight / "best.pt", weights_only=False)["model"],
-                               torch.load(resumed / "best.pt", weights_only=False)["model"], rtol=1e-6, atol=1e-7)
+    torch.testing.assert_close(
+        torch.load(straight / "best.pt", weights_only=True)["model"],
+        torch.load(resumed / "best.pt", weights_only=True)["model"],
+        rtol=1e-6,
+        atol=1e-7,
+    )
 
     changed = load_config(config_file)
+    changed.train.feature_cache = "off"
+    changed.train.patience = 10
     changed.train.learning_rate *= 2
     try:
-        train(changed, extra, tmp_path / "interrupted", resume=partial)
+        train(changed, tmp_path / "interrupted", resume=partial)
     except ValueError as error:
         assert "configuration differs" in str(error)
     else:
@@ -254,9 +288,18 @@ def test_repeatability_check_compares_same_seed_and_records_switch(tmp_path, mon
     same, different = check_repeatable(config_file, 1, tmp_path / "repeat-runs", ['train.feature_cache="off"'])
     assert same == 0.0
     assert different > 0.0
-    configs = [yaml.safe_load((tmp_path / "repeat-runs" / f"run-{i}" / next(
-        (tmp_path / "repeat-runs" / f"run-{i}").iterdir()
-    ) / "config.yaml").read_text(encoding="utf-8")) for i in range(3)]
+    configs = [
+        yaml.safe_load(
+            (
+                tmp_path
+                / "repeat-runs"
+                / f"run-{i}"
+                / next((tmp_path / "repeat-runs" / f"run-{i}").iterdir())
+                / "config.yaml"
+            ).read_text(encoding="utf-8")
+        )
+        for i in range(3)
+    ]
     assert [item["train"]["seed"] for item in configs] == [19, 19, 20]
     assert all(item["train"]["deterministic"] is True for item in configs)
 
@@ -274,8 +317,61 @@ def test_weighted_sampler_applies_on_frozen_feature_cache_path(tmp_path, monkeyp
         encoding="utf-8",
     )
     import ie4483.train as train_module
+
     seen = []
     original = train_module._fit
-    monkeypatch.setattr(train_module, "_fit", lambda model, loader, *a, **k: seen.append(loader) or original(model, loader, *a, **k))
-    train(load_config(config_file), {"feature_cache": "auto", "weighted_sampler": True}, tmp_path / "runs")
+    monkeypatch.setattr(
+        train_module, "_fit", lambda model, loader, *a, **k: seen.append(loader) or original(model, loader, *a, **k)
+    )
+    config = load_config(config_file)
+    config.train.weighted_sampler = True
+    train(config, tmp_path / "runs")
     assert isinstance(seen[0].sampler, torch.utils.data.WeightedRandomSampler)
+
+
+def test_patience_tolerates_that_many_non_improving_epochs_before_stopping(tmp_path, monkeypatch):
+    import ie4483.train as training
+
+    class Tiny(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.head = torch.nn.Linear(2, 2)
+
+        def forward(self, x):
+            return self.head(x)
+
+    calls = 0
+
+    def epoch(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        # Validation (even calls) never improves after epoch 1.
+        return (1.0, 0.5) if calls % 2 else (0.5 + 0.1 * calls, 0.5)
+
+    monkeypatch.setattr(training, "_epoch", epoch)
+    cfg = Config(
+        train=TrainConfig(batch_size=2, mixed_precision=False, epochs=10, scheduler="none", patience=2),
+        eval=EvalConfig(batch_size=2),
+    )
+    data = (torch.ones(2, 2), torch.tensor([0, 1]))
+    loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(*data), batch_size=2)
+    training._fit(Tiny(), loader, loader, cfg, tmp_path, torch.device("cpu"))
+    rows = list(csv.DictReader((tmp_path / "metrics.csv").open(encoding="utf-8")))
+    assert len(rows) == 4  # epoch 1 sets the minimum; epochs 2-3 are tolerated; epoch 4 exceeds patience=2
+
+
+def test_train_leaves_the_callers_config_untouched(tmp_path, monkeypatch):
+    import copy
+
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    _images(tmp_path, "train")
+    _images(tmp_path, "val")
+    config = Config(
+        train=TrainConfig(batch_size=2, epochs=1, mixed_precision=False, class_weighted=True, feature_cache="off")
+    )
+    config.data.root = str(tmp_path)
+    config.data.image_size = 32
+    config.model.pretrained = False
+    before = copy.deepcopy(config)
+    train(config, tmp_path / "runs")
+    assert config == before  # e.g. computed class weights are not written back

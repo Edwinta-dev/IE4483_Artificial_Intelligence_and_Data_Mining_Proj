@@ -5,13 +5,8 @@ from __future__ import annotations
 import argparse
 import logging
 
-import sys
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
-
-from ie4483.train import load_training_config, train
+from ie4483.config import load_config
+from ie4483.train import train
 
 
 def main() -> None:
@@ -21,8 +16,8 @@ def main() -> None:
     parser.add_argument("--resume", metavar="RUN_DIR", help="resume training from RUN_DIR/last.pt")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    config, extra = load_training_config(args.config, args.set)
-    print(train(config, extra, resume=args.resume))
+    config = load_config(args.config, args.set)
+    print(train(config, resume=args.resume))
 
 
 if __name__ == "__main__":

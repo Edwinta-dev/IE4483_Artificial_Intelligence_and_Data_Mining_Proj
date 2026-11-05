@@ -3,8 +3,9 @@ import pickle
 import numpy as np
 
 from ie4483.cifar import CIFAR10_CLASSES, CIFAR10Dataset
+from ie4483.config import load_config
 from ie4483.evaluate import evaluate
-from ie4483.train import load_training_config, train
+from ie4483.train import train
 
 
 def _make_cifar(root):
@@ -44,10 +45,12 @@ def test_cifar_one_epoch_cpu_and_test_evaluation(tmp_path, monkeypatch):
         "  classes: [airplane, automobile, bird, cat, deer, dog, frog, horse, ship, truck]\n"
         "model:\n  architecture: resnet18\n  pretrained: false\n  freeze_backbone: true\n  num_classes: 10\n"
         "train:\n  seed: 7\n  epochs: 1\n  batch_size: 10\n  mixed_precision: false\n"
-        "eval:\n  batch_size: 10\n", encoding="utf-8")
-    config, extra = load_training_config(config_path)
-    extra["feature_cache"] = "off"
-    run = train(config, extra, tmp_path / "runs")
+        "eval:\n  batch_size: 10\n",
+        encoding="utf-8",
+    )
+    config = load_config(config_path)
+    config.train.feature_cache = "off"
+    run = train(config, tmp_path / "runs")
     result_path = tmp_path / "result.json"
     metrics = evaluate(run, result_path, "test")
     assert metrics["count"] == 20
@@ -56,6 +59,8 @@ def test_cifar_one_epoch_cpu_and_test_evaluation(tmp_path, monkeypatch):
     assert all(len(row) == 10 for row in metrics["confusion_matrix"])
     assert (run / "test_confusion_matrix.png").is_file()
     assert (run / "test_metrics.json").is_file()
+    header = (run / "test_predictions.csv").read_text(encoding="utf-8").splitlines()[0]
+    assert header == "path,true,predicted,confidence"  # multiclass runs have no p_dog column
     assert '"split": "test"' in result_path.read_text(encoding="utf-8")
 
 
@@ -66,8 +71,10 @@ def _cifar_config(tmp_path):
         "  classes: [airplane, automobile, bird, cat, deer, dog, frog, horse, ship, truck]\n"
         "model:\n  architecture: resnet18\n  pretrained: false\n  freeze_backbone: true\n  num_classes: 10\n"
         "train:\n  seed: 7\n  epochs: 1\n  batch_size: 10\n  mixed_precision: false\n"
-        "eval:\n  batch_size: 10\n", encoding="utf-8")
-    return load_training_config(config_path)
+        "eval:\n  batch_size: 10\n",
+        encoding="utf-8",
+    )
+    return load_config(config_path)
 
 
 def test_frozen_cifar_without_augmentation_uses_feature_cache(tmp_path, monkeypatch):
@@ -78,10 +85,11 @@ def test_frozen_cifar_without_augmentation_uses_feature_cache(tmp_path, monkeypa
     calls = []
     original = training.extract_features
     monkeypatch.setattr(training, "extract_features", lambda *a: calls.append(1) or original(*a))
-    config, extra = _cifar_config(tmp_path)
-    extra.update(cifar_augment=False, imbalance_fractions={0: 0.5})
-    train(config, dict(extra), tmp_path / "runs")
-    train(config, dict(extra), tmp_path / "runs")
+    config = _cifar_config(tmp_path)
+    config.train.cifar_augment = False
+    config.train.imbalance_fractions = {0: 0.5}
+    train(config, tmp_path / "runs")
+    train(config, tmp_path / "runs")
     assert len(calls) == 2  # train + val built once, reused on the second run
     assert len(list((tmp_path / "runs" / "feature_cache").glob("*.pt"))) == 1
 

@@ -26,8 +26,9 @@ def _save_report_figure(fig: Any, stem: str, output_dir: str | Path) -> tuple[Pa
     return paths
 
 
-def training_curves(metrics: list[dict[str, str]], title: str, output_dir: str | Path,
-                    stem: str = "training_curves") -> tuple[Path, Path]:
+def training_curves(
+    metrics: list[dict[str, str]], title: str, output_dir: str | Path, stem: str = "training_curves"
+) -> tuple[Path, Path]:
     """Draw train/validation loss and accuracy and mark the best validation epoch."""
     if not metrics:
         raise ValueError("metrics must contain at least one epoch")
@@ -83,8 +84,9 @@ def model_architecture_figure(model: nn.Module, image_size: int, output_dir: str
     blocks = [("Input", f"3 × {height} × {width}", False)]
     blocks.append(("Stem", f"64 × {height // 2} × {width // 2}", model.freeze_mode == "full"))
     h, w = (height + 3) // 4, (width + 3) // 4
-    for index, channels in enumerate((model.feature_dim // 8, model.feature_dim // 4,
-                                      model.feature_dim // 2, model.feature_dim), start=1):
+    for index, channels in enumerate(
+        (model.feature_dim // 8, model.feature_dim // 4, model.feature_dim // 2, model.feature_dim), start=1
+    ):
         if index > 1:
             h, w = (h + 1) // 2, (w + 1) // 2
         trainable = model.freeze_mode == "full" or (model.freeze_mode == "last_block" and index == 4)
@@ -101,11 +103,17 @@ def model_architecture_figure(model: nn.Module, image_size: int, output_dir: str
     axis.axis("off")
     for i, (title, shape, trainable) in enumerate(blocks):
         color = "#f4a261" if trainable else "#9ecae1"
-        axis.text(i + .5, .56, f"{title}\n{shape}\n{'trainable' if trainable else 'frozen'}",
-                  ha="center", va="center", fontsize=8,
-                  bbox={"boxstyle": "round,pad=0.45", "facecolor": color, "edgecolor": "#34495e"})
+        axis.text(
+            i + 0.5,
+            0.56,
+            f"{title}\n{shape}\n{'trainable' if trainable else 'frozen'}",
+            ha="center",
+            va="center",
+            fontsize=8,
+            bbox={"boxstyle": "round,pad=0.45", "facecolor": color, "edgecolor": "#34495e"},
+        )
         if i < len(blocks) - 1:
-            axis.annotate("", (i + .95, .56), (i + .72, .56), arrowprops={"arrowstyle": "->", "color": "#34495e"})
+            axis.annotate("", (i + 0.95, 0.56), (i + 0.72, 0.56), arrowprops={"arrowstyle": "->", "color": "#34495e"})
     fig.suptitle(f"{type(model.backbone).__name__} with custom classifier head · freeze mode: {model.freeze_mode}")
     fig.tight_layout()
     paths = (output / "model_architecture.png", output / "model_architecture.pdf")
@@ -115,18 +123,21 @@ def model_architecture_figure(model: nn.Module, image_size: int, output_dir: str
     return paths
 
 
-def write_model_card(model: nn.Module, config: Any, training: dict[str, Any], output_dir: str | Path) -> Path:
+def write_model_card(model: nn.Module, config: Any, output_dir: str | Path) -> Path:
     """Write a Markdown model card from the built model and resolved settings."""
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
     summary = model_summary(model, config.data.image_size)
     layers = " → ".join(_module_name(layer) for layer in model.head)
-    weights_source = "Torchvision ImageNet default weights" if config.model.pretrained else "None (random initialization)"
-    schedule = training["scheduler"]
+    training = config.train
+    weights_source = (
+        "Torchvision ImageNet default weights" if config.model.pretrained else "None (random initialization)"
+    )
+    schedule = training.scheduler
     if schedule == "cosine":
         schedule = f"cosine annealing over {config.train.epochs} epochs"
     elif schedule == "step":
-        schedule = f"StepLR, step_size={training['step_size']}, gamma={training['gamma']}"
+        schedule = f"StepLR, step_size={training.step_size}, gamma={training.gamma}"
     else:
         schedule = "none"
     text = f"""# Model card
@@ -135,15 +146,15 @@ def write_model_card(model: nn.Module, config: Any, training: dict[str, Any], ou
 - Backbone: {type(model.backbone).__name__}
 - Pretrained source: {weights_source}
 - Freeze mode: {model.freeze_mode}
-- Input shape: `{summary['input_shape']}`
-- Output shape: `{summary['output_shape']}`
+- Input shape: `{summary["input_shape"]}`
+- Output shape: `{summary["output_shape"]}`
 - Head layers: {layers}
-- Loss: CrossEntropyLoss (label smoothing {training['label_smoothing']})
-- Optimizer: {training['optimizer'].upper()}
-- Learning rate: {config.train.learning_rate:g} (head); backbone {training['backbone_learning_rate']:g}
+- Loss: CrossEntropyLoss (label smoothing {training.label_smoothing})
+- Optimizer: {training.optimizer.upper()}
+- Learning rate: {config.train.learning_rate:g} (head); backbone {training.backbone_learning_rate:g}
 - Schedule: {schedule}
 - Selection: best.pt by validation accuracy; early stopping by validation loss.
-- Parameters: {summary['trainable_parameters']:,} trainable / {summary['total_parameters']:,} total
+- Parameters: {summary["trainable_parameters"]:,} trainable / {summary["total_parameters"]:,} total
 """
     card = output / "model_card.md"
     card.write_text(text, encoding="utf-8")

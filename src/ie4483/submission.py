@@ -42,5 +42,4 @@ def write_prediction_csvs(
     with (output / "test_predictions.csv").open("w", newline="", encoding="utf-8") as stream:
         writer = csv.writer(stream, lineterminator="\n")
         writer.writerow(("id", "p_cat", "p_dog"))
-        writer.writerows((image_id, f"{float(row[0]):.10g}", f"{float(row[1]):.10g}")
-                         for image_id, _, row in ordered)
+        writer.writerows((image_id, f"{float(row[0]):.10g}", f"{float(row[1]):.10g}") for image_id, _, row in ordered)

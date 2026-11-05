@@ -39,8 +39,20 @@ def test_proxy_generator_layout_selection_and_audits(tmp_path):
     cifar = tmp_path / "cifar"
     out = tmp_path / "proxy"
     _fake_cifar(cifar)
-    command = [sys.executable, str(project / "scripts/make_proxy_catdog.py"), "--cifar-root", str(cifar),
-               "--out", str(out), "--n-train", "3", "--n-val", "1", "--seed", "81"]
+    command = [
+        sys.executable,
+        str(project / "scripts/make_proxy_catdog.py"),
+        "--cifar-root",
+        str(cifar),
+        "--out",
+        str(out),
+        "--n-train",
+        "3",
+        "--n-val",
+        "1",
+        "--seed",
+        "81",
+    ]
     subprocess.run(command, check=True, cwd=project)
     second = tmp_path / "proxy-second"
     second_command = list(command)
@@ -56,7 +68,8 @@ def test_proxy_generator_layout_selection_and_audits(tmp_path):
         for name in ("cat", "dog"):
             assert len(list((out / split / name).glob("*.png"))) == count
             assert [p.read_bytes() for p in sorted((out / split / name).glob("*.png"))] == [
-                p.read_bytes() for p in sorted((second / split / name).glob("*.png"))]
+                p.read_bytes() for p in sorted((second / split / name).glob("*.png"))
+            ]
     manifest = list(csv.DictReader((out / "manifest.csv").open(encoding="utf-8")))
     assert len({row["cifar_index"] for row in manifest if row["split"] != "test"}) == 8
     hashes = {}
@@ -71,9 +84,19 @@ def test_proxy_generator_layout_selection_and_audits(tmp_path):
     assert not audit["train_validation_duplicates"] and not audit["train_test_duplicates"]
 
     setup_script = project / "scripts/check_setup.py"
-    result = subprocess.run([sys.executable, str(setup_script), "--data-root", str(out)], check=False, cwd=project,
-                            capture_output=True, text=True)
+    result = subprocess.run(
+        [sys.executable, str(setup_script), "--data-root", str(out)],
+        check=False,
+        cwd=project,
+        capture_output=True,
+        text=True,
+    )
     assert result.returncode == 0
+
+
+def _off(config):
+    config.train.feature_cache = "off"
+    return config
 
 
 def test_proxy_one_epoch_cpu_evaluate_and_predict(tmp_path, monkeypatch, request):
@@ -87,15 +110,31 @@ def test_proxy_one_epoch_cpu_evaluate_and_predict(tmp_path, monkeypatch, request
     out = tmp_path / "proxy"
     _fake_cifar(cifar)
     project = Path(__file__).resolve().parents[1]
-    subprocess.run([sys.executable, str(project / "scripts/make_proxy_catdog.py"), "--cifar-root", str(cifar),
-                    "--out", str(out), "--n-train", "3", "--n-val", "1"], check=True, cwd=project)
+    subprocess.run(
+        [
+            sys.executable,
+            str(project / "scripts/make_proxy_catdog.py"),
+            "--cifar-root",
+            str(cifar),
+            "--out",
+            str(out),
+            "--n-train",
+            "3",
+            "--n-val",
+            "1",
+        ],
+        check=True,
+        cwd=project,
+    )
     config_path = tmp_path / "config.yaml"
     config_path.write_text(
         f"data:\n  root: '{out.as_posix()}'\n  image_size: 32\n  classes: [cat, dog]\n"
         "model:\n  architecture: resnet18\n  pretrained: false\n  freeze_backbone: true\n  num_classes: 2\n"
         "train:\n  seed: 4\n  epochs: 1\n  batch_size: 2\n  mixed_precision: false\n"
-        "eval:\n  batch_size: 2\n", encoding="utf-8")
-    run = train(load_config(config_path), {"feature_cache": "off"}, tmp_path / "runs")
+        "eval:\n  batch_size: 2\n",
+        encoding="utf-8",
+    )
+    run = train(_off(load_config(config_path)), tmp_path / "runs")
     metrics = evaluate(run, tmp_path / "result.json")
     assert metrics["proxy"] is True
     assert json.loads((run / "val_metrics.json").read_text(encoding="utf-8"))["proxy"] is True

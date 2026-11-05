@@ -7,7 +7,14 @@ setup does not train on real data or download weights.
 
 ## Environment
 
-Use the shared environment at `C:/Users/AgenticDev/ml-venv/Scripts/python.exe`.
+Use the shared environment at `C:/Users/AgenticDev/ml-venv/Scripts/python.exe`,
+or create your own and install the package in editable mode (this is required
+for the scripts to import `ie4483`):
+
+```bash
+pip install -e ".[dev]"
+```
+
 The data root is `data/` by default, can be set with `IE4483_DATA`, or can be
 configured in `configs/base.yaml`. Data, run outputs, and model weights are
 ignored by git.

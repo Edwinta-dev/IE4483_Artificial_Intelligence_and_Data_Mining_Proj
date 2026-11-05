@@ -60,3 +60,31 @@ def test_model_freeze_mode_accepted_and_validated(tmp_path) -> None:
     assert load_config(path, ["model.freeze_mode=null"]).model.freeze_mode is None
     with _pytest.raises(ValueError, match="freeze_mode"):
         load_config(path, ["model.freeze_mode=partial"])
+
+
+def test_training_hyperparameters_are_typed_and_validated():
+    config = load_config(BASE, ["train.optimizer=SGD", "train.focal_gamma=2", 'train.imbalance_fractions={"3": 0.1}'])
+    assert config.train.optimizer == "sgd"
+    assert config.train.focal_gamma == 2.0 and isinstance(config.train.focal_gamma, float)
+    assert config.train.imbalance_fractions == {"3": 0.1}
+    assert config.train.patience == 3 and config.train.feature_cache == "auto"
+
+    with pytest.raises(ValueError, match="unknown configuration key 'train.weigth_decay'"):
+        load_config(BASE, ["train.weigth_decay=0.1"])
+    with pytest.raises(ValueError, match="'train.scheduler' must be one of cosine, step, none"):
+        load_config(BASE, ["train.scheduler=linear"])
+    with pytest.raises(ValueError, match="invalid type for 'train.patience'"):
+        load_config(BASE, ["train.patience=abc"])
+
+
+def test_dataset_kind_is_explicit_or_inferred_from_class_count():
+    from ie4483.config import Config, DataConfig
+
+    assert Config().dataset_kind == "imagefolder"
+    assert Config(data=DataConfig(classes=[str(i) for i in range(10)])).dataset_kind == "cifar10"
+    assert (
+        Config(data=DataConfig(classes=[str(i) for i in range(10)], dataset="imagefolder")).dataset_kind
+        == "imagefolder"
+    )
+    with pytest.raises(ValueError, match="'data.dataset' must be one of imagefolder, cifar10"):
+        load_config(BASE, ["data.dataset=imagenet"])

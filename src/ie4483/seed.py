@@ -6,10 +6,12 @@ import random
 import numpy as np
 import torch
 
+from ie4483.validation import is_int
+
 
 def seed_everything(seed: int, deterministic: bool = True) -> None:
     """Seed random generators and configure deterministic torch operations."""
-    if isinstance(seed, bool) or not isinstance(seed, int):
+    if not is_int(seed):
         raise TypeError("seed must be an integer")
     if not isinstance(deterministic, bool):
         raise TypeError("deterministic must be a boolean")
