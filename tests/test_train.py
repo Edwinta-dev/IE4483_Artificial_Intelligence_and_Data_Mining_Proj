@@ -145,7 +145,7 @@ def test_cosine_schedule_reaches_minimum_after_final_warmup_adjusted_epoch(tmp_p
     training._fit(Tiny(), torch.utils.data.DataLoader(torch.utils.data.TensorDataset(*data), batch_size=2),
                   torch.utils.data.DataLoader(torch.utils.data.TensorDataset(*data), batch_size=2), cfg,
                   tmp_path, torch.device("cpu"))
-    checkpoint = torch.load(tmp_path / "last.pt", map_location="cpu", weights_only=False)
+    checkpoint = torch.load(tmp_path / "last.pt", map_location="cpu", weights_only=True)
     assert checkpoint["scheduler"]["T_max"] == 3
     assert checkpoint["scheduler"]["last_epoch"] == 3
     assert checkpoint["optimizer"]["param_groups"][0]["lr"] == pytest.approx(0.0)
@@ -218,8 +218,8 @@ def test_interrupted_training_resumes_with_matching_weights_and_metrics(tmp_path
     for expected, actual in zip(straight_rows, resumed_rows):
         for key in ("train_loss", "train_acc", "val_loss", "val_acc", "lr"):
             assert float(actual[key]) == pytest.approx(float(expected[key]), abs=1e-7)
-    torch.testing.assert_close(torch.load(straight / "best.pt", weights_only=False)["model"],
-                               torch.load(resumed / "best.pt", weights_only=False)["model"], rtol=1e-6, atol=1e-7)
+    torch.testing.assert_close(torch.load(straight / "best.pt", weights_only=True)["model"],
+                               torch.load(resumed / "best.pt", weights_only=True)["model"], rtol=1e-6, atol=1e-7)
 
     changed = load_config(config_file)
     changed.train.feature_cache = "off"

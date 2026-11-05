@@ -86,14 +86,18 @@ class _HeadOnly(nn.Module):
 
 
 def _rng_state(loader):
-    return {"python": random.getstate(), "numpy": np.random.get_state(), "torch": torch.get_rng_state(),
+    # Plain lists/tensors only, so checkpoints load with ``weights_only=True`` (no ndarray unpickling).
+    name, keys, position, has_gauss, cached_gaussian = np.random.get_state()
+    return {"python": random.getstate(), "numpy": (name, keys.tolist(), position, has_gauss, cached_gaussian),
+            "torch": torch.get_rng_state(),
             "cuda": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
             "loader": loader.generator.get_state() if loader.generator is not None else None}
 
 
 def _restore_rng(state, loader):
     random.setstate(state["python"])
-    np.random.set_state(state["numpy"])
+    name, keys, position, has_gauss, cached_gaussian = state["numpy"]
+    np.random.set_state((name, np.array(keys, dtype=np.uint32), position, has_gauss, cached_gaussian))
     # The checkpoint is loaded with map_location=device, which moves these ByteTensors
     # onto the GPU; the RNG setters only accept CPU tensors.
     torch.set_rng_state(state["torch"].cpu())
@@ -145,7 +149,7 @@ def _fit(model, train_loader, val_loader, cfg, run_dir, device, *, checkpoint_mo
     checkpoint_path = run_dir / "last.pt"
     start_epoch, best_acc, min_val_loss, stale = 1, -1.0, math.inf, 0
     if resume:
-        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=True)
         model.load_state_dict(checkpoint["training_model"])
         if checkpoint_model is not None:
             checkpoint_model.load_state_dict(checkpoint["model"])
