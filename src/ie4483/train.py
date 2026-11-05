@@ -18,7 +18,7 @@ from torch import nn
 from torch.utils.data import Subset, TensorDataset
 
 from ie4483.cifar import CIFAR10Dataset, cifar_transform
-from ie4483.config import Config, config_to_dict
+from ie4483.config import Config, config_to_dict, dump_config
 from ie4483.data import ImageFolderDataset, make_dataloader
 from ie4483.features import extract_features, feature_cache_key, load_or_create_cache
 from ie4483.imbalance import (
@@ -282,7 +282,7 @@ def _prepare_run_dir(config: Config, run_root: Path, resume: str | Path | None) 
         return run_dir
     run_dir = run_root / f"{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}-{config.model.architecture}"
     run_dir.mkdir(parents=True, exist_ok=False)
-    (run_dir / "config.yaml").write_text(yaml.safe_dump(run_config, sort_keys=False), encoding="utf-8")
+    dump_config(config, run_dir)
     return run_dir
 
 

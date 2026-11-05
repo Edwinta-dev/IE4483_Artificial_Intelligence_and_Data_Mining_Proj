@@ -17,11 +17,6 @@ def repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def runs_dir() -> Path:
-    """Return the repository's run-output directory."""
-    return repo_root() / "runs"
-
-
 def weights_cache_dir() -> Path:
     """Return torch hub's checkpoints directory, honoring TORCH_HOME."""
     torch_home = os.environ.get("TORCH_HOME")
