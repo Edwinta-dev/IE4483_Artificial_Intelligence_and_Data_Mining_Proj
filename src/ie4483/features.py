@@ -10,17 +10,15 @@ from typing import Any
 import torch
 from torch.utils.data import DataLoader
 
+from ie4483.config import get_setting
+
 
 def feature_cache_key(config: Any, manifest: list[tuple[str, int]]) -> str:
     """Hash all inputs that can change pooled backbone features."""
-    def get(section: str, key: str, default: Any = None) -> Any:
-        part = config.get(section, {}) if isinstance(config, dict) else getattr(config, section, None)
-        return part.get(key, default) if isinstance(part, dict) else getattr(part, key, default)
-
     payload = {
-        "backbone": get("model", "architecture", "resnet18"),
-        "pretrained": get("model", "pretrained", False),
-        "image_size": get("data", "image_size", 224),
+        "backbone": get_setting(config, "model", "architecture", default="resnet18"),
+        "pretrained": get_setting(config, "model", "pretrained", default=False),
+        "image_size": get_setting(config, "data", "image_size", default=224),
         "eval_transform": "Resize-CenterCrop-ImageNetNormalize",
         "manifest": manifest,
     }

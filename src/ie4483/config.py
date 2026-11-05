@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import types
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, TypeVar, Union, get_args, get_origin, get_type_hints
 
@@ -12,6 +13,17 @@ import yaml
 from ie4483.paths import resolve_data_root
 
 T = TypeVar("T")
+
+_MISSING = object()
+
+
+def get_setting(source: Any, *path: str, default: Any = None) -> Any:
+    """Follow ``path`` through attributes or mapping keys (a ``Config`` or a plain dict), else ``default``."""
+    for key in path:
+        source = source.get(key, _MISSING) if isinstance(source, Mapping) else getattr(source, key, _MISSING)
+        if source is _MISSING:
+            return default
+    return source
 
 FREEZE_MODES = ("frozen", "last_block", "full")
 # Fields restricted to a fixed set of (lower-case) values: (section, field) -> allowed values.

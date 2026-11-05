@@ -10,6 +10,8 @@ from typing import Any
 
 import torch
 
+from ie4483.validation import is_int, is_number
+
 EFFECTIVE_BATCH_SIZE = 32
 
 
@@ -67,11 +69,11 @@ def find_max_batch(
     ``torch.cuda.OutOfMemoryError`` when it cannot fit. It is called with
     increasing batch sizes; CUDA cache is emptied after every attempt.
     """
-    if isinstance(start, bool) or not isinstance(start, int) or start < 1:
+    if not is_int(start) or start < 1:
         raise ValueError("start must be a positive integer")
-    if isinstance(limit, bool) or not isinstance(limit, int) or limit < start:
+    if not is_int(limit) or limit < start:
         raise ValueError("limit must be an integer greater than or equal to start")
-    if isinstance(safety_margin, bool) or not 0 < safety_margin <= 1:
+    if not is_number(safety_margin) or not 0 < safety_margin <= 1:
         raise ValueError("safety_margin must be in (0, 1]")
 
     def attempt(batch_size: int) -> bool:
