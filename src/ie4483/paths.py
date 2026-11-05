@@ -12,9 +12,14 @@ def resolve_data_root(configured_root: str | Path | None = None) -> Path:
     return Path(root).expanduser()
 
 
+def repo_root() -> Path:
+    """Return the repository root (two levels above ``src/ie4483``)."""
+    return Path(__file__).resolve().parents[2]
+
+
 def runs_dir() -> Path:
     """Return the repository's run-output directory."""
-    return Path(__file__).resolve().parents[2] / "runs"
+    return repo_root() / "runs"
 
 
 def weights_cache_dir() -> Path:

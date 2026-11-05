@@ -30,3 +30,16 @@ def test_preprocessing_deduplicates_across_splits_and_replaces_old_images(tmp_pa
     assert (output / "test/1.jpg").is_file()
     assert (output / "test/2.jpg").is_file()
     assert not (output / "train/cat/stale.jpg").exists()
+
+
+def test_cleanup_only_touches_the_output_split_folders(tmp_path):
+    source, output = tmp_path / "source", tmp_path / "output"
+    write_image(source / "train/cat/a.png", "red")
+    write_image(output / "other/keep.jpg", "black")  # unrelated image under the output root
+    write_image(output / "train/cat/stale.jpg", "black")
+
+    preprocess_images(source, output, (16, 16))
+
+    assert (output / "other/keep.jpg").is_file()
+    assert not (output / "train/cat/stale.jpg").exists()
+    assert (output / "train/cat/a.jpg").is_file()
