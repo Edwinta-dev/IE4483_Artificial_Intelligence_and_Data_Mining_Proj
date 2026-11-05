@@ -9,7 +9,7 @@ import torch
 
 from ie4483.config import load_config
 from ie4483.data import UnlabelledTestDataset, make_dataloader
-from ie4483.model import build_model
+from ie4483.runs import get_device, load_best_model
 from ie4483.seed import seed_everything
 from ie4483.submission import write_prediction_csvs
 from ie4483.transforms import build_eval_transform
@@ -28,11 +28,8 @@ def predict(run: str, tta: str | None = None) -> None:
     dataset = UnlabelledTestDataset(config.data_root, build_eval_transform(config))
     if dataset.unreadable_count:
         raise ValueError("test split contains unreadable images")
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = build_model(config).to(device)
-    checkpoint = torch.load(run_dir / "best.pt", map_location=device, weights_only=False)
-    model.load_state_dict(checkpoint["model"])
-    model.eval()
+    device = get_device()
+    model = load_best_model(run_dir, config, device)
     loader = make_dataloader(dataset, config.eval.batch_size, config.eval.num_workers)
     image_ids: list[int] = []
     probabilities: list[list[float]] = []

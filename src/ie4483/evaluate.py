@@ -19,8 +19,8 @@ from PIL import Image
 from ie4483.cifar import CIFAR10Dataset, cifar_transform
 from ie4483.config import load_config
 from ie4483.data import ImageFolderDataset, make_dataloader
-from ie4483.model import build_model
 from ie4483.proxy import proxy_metric
+from ie4483.runs import get_device, load_best_model
 from ie4483.seed import seed_everything
 from ie4483.transforms import build_eval_transform
 
@@ -64,22 +64,25 @@ def _open_image(record: dict[str, Any]) -> Image.Image:
 
 def _gallery(records: list[dict[str, Any]], kind: str, class_name: str, output: Path,
              load_image: Callable[[dict[str, Any]], Image.Image] = _open_image) -> None:
+    """Save up to ``_GALLERY_LIMIT`` example images of ``class_name``: most confident correct/wrong, or least sure."""
+    in_class = [r for r in records if r["true_name"] == class_name]
     if kind == "correct":
-        candidates = [r for r in records if r["true"] == r["predicted"] and r["true_name"] == class_name]
-        chosen = sorted(candidates, key=lambda r: r["confidence"], reverse=True)[:_GALLERY_LIMIT]
+        chosen = sorted((r for r in in_class if r["true"] == r["predicted"]),
+                        key=lambda r: r["confidence"], reverse=True)[:_GALLERY_LIMIT]
     elif kind == "wrong":
-        candidates = [r for r in records if r["true"] != r["predicted"] and r["true_name"] == class_name]
-        chosen = sorted(candidates, key=lambda r: r["confidence"], reverse=True)[:_GALLERY_LIMIT]
+        chosen = sorted((r for r in in_class if r["true"] != r["predicted"]),
+                        key=lambda r: r["confidence"], reverse=True)[:_GALLERY_LIMIT]
     else:
-        candidates = [r for r in records if r["true_name"] == class_name]
-        chosen = sorted(candidates, key=lambda r: abs(r["p_dog"] - 0.5))[:_GALLERY_LIMIT]
+        # Binary runs are least sure near p = 0.5; otherwise the lowest top-class confidence.
+        chosen = sorted(in_class, key=lambda r: abs(r["p_dog"] - 0.5) if "p_dog" in r else r["confidence"])[:_GALLERY_LIMIT]
     fig, axes = plt.subplots(1, max(1, len(chosen)), figsize=(3 * max(1, len(chosen)), 3.6), squeeze=False)
     if not chosen:
         axes[0, 0].text(0.5, 0.5, "No matching validation images", ha="center", va="center")
         axes[0, 0].axis("off")
     for ax, record in zip(axes[0], chosen):
+        score = f"p(dog)={record['p_dog']:.3f}" if "p_dog" in record else f"confidence={record['confidence']:.3f}"
         ax.imshow(load_image(record))
-        ax.set_title(f"true={record['true_name']}  pred={record['predicted_name']}\np(dog)={record['p_dog']:.3f}")
+        ax.set_title(f"true={record['true_name']}  pred={record['predicted_name']}\n{score}")
         ax.axis("off")
     fig.tight_layout()
     fig.savefig(output, dpi=140)
@@ -87,17 +90,19 @@ def _gallery(records: list[dict[str, Any]], kind: str, class_name: str, output: 
 
 
 def evaluate(run: str | Path, results_path: str | Path = "results/latest.json", split: str = "val") -> dict[str, Any]:
-    """Evaluate best.pt against validation, or CIFAR-10's official test split."""
+    """Evaluate best.pt against validation, or CIFAR-10's official test split.
+
+    ``best.pt`` was selected by validation accuracy, so validation metrics are optimistically biased; the held-out
+    test split is the unbiased estimate. Binary runs report ``p_dog`` (probability of class index 1); runs with more
+    classes report the top-class ``confidence`` instead.
+    """
     if split not in {"val", "test"}:
         raise ValueError("split must be val or test")
     run_dir = Path(run)
     config = load_config(run_dir / "config.yaml")
     seed_everything(config.train.seed)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = build_model(config).to(device)
-    checkpoint = torch.load(run_dir / "best.pt", map_location=device, weights_only=False)
-    model.load_state_dict(checkpoint["model"])
-    model.eval()
+    device = get_device()
+    model = load_best_model(run_dir, config, device)
     if config.dataset_kind == "cifar10":
         dataset = CIFAR10Dataset(config.data_root, split, cifar_transform(config.data.image_size), config.train.seed)
     elif split == "test":
@@ -108,7 +113,7 @@ def evaluate(run: str | Path, results_path: str | Path = "results/latest.json", 
     loader = make_dataloader(dataset, config.eval.batch_size, config.eval.num_workers)
     truths: list[int] = []
     predictions: list[int] = []
-    probabilities: list[float] = []
+    probabilities: list[list[float]] = []
     loss_sum = 0.0
     with torch.inference_mode():
         for images, labels in loader:
@@ -118,22 +123,27 @@ def evaluate(run: str | Path, results_path: str | Path = "results/latest.json", 
             probs = logits.softmax(dim=1).cpu()
             truths.extend(labels.tolist())
             predictions.extend(probs.argmax(dim=1).tolist())
-            probabilities.extend(probs[:, 1].tolist())
+            probabilities.extend(probs.tolist())
     if not truths:
         raise ValueError(f"{split} split contains no readable images")
     classes = list(config.data.classes)
+    binary = len(classes) == 2
+    score_column = "p_dog" if binary else "confidence"
     records = []
     samples = dataset.samples if hasattr(dataset, "samples") else [("", int(label)) for label in dataset.labels]
-    for index, ((path, truth), pred, p_dog) in enumerate(zip(samples, predictions, probabilities)):
-        records.append({"path": str(path), "index": index, "true": truth, "predicted": pred, "p_dog": p_dog,
-                        "true_name": classes[truth], "predicted_name": classes[pred],
-                        "confidence": p_dog if pred == 1 else 1 - p_dog})
+    for index, ((path, truth), pred, probs) in enumerate(zip(samples, predictions, probabilities)):
+        record = {"path": str(path), "index": index, "true": truth, "predicted": pred,
+                  "true_name": classes[truth], "predicted_name": classes[pred], "confidence": max(probs)}
+        if binary:
+            record["p_dog"] = probs[1]
+            record["confidence"] = probs[1] if pred == 1 else 1 - probs[1]
+        records.append(record)
     metrics = _scores(truths, predictions, loss_sum / len(truths), classes)
     metrics.update(proxy_metric(config.data_root))
     with (run_dir / f"{split}_predictions.csv").open("w", newline="", encoding="utf-8") as stream:
         writer = csv.writer(stream)
-        writer.writerow(("path", "true", "predicted", "p_dog"))
-        writer.writerows((r["path"], r["true"], r["predicted"], f"{r['p_dog']:.10g}") for r in records)
+        writer.writerow(("path", "true", "predicted", score_column))
+        writer.writerows((r["path"], r["true"], r["predicted"], f"{r[score_column]:.10g}") for r in records)
     matrix = np.zeros((len(classes), len(classes)), dtype=int)
     for truth, pred in zip(truths, predictions):
         matrix[truth, pred] += 1

@@ -57,6 +57,8 @@ def test_cifar_one_epoch_cpu_and_test_evaluation(tmp_path, monkeypatch):
     assert all(len(row) == 10 for row in metrics["confusion_matrix"])
     assert (run / "test_confusion_matrix.png").is_file()
     assert (run / "test_metrics.json").is_file()
+    header = (run / "test_predictions.csv").read_text(encoding="utf-8").splitlines()[0]
+    assert header == "path,true,predicted,confidence"  # multiclass runs have no p_dog column
     assert '"split": "test"' in result_path.read_text(encoding="utf-8")
 
 

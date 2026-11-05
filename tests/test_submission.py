@@ -55,8 +55,7 @@ def test_predict_reads_generated_test_images_and_writes_sorted_rows(tmp_path, mo
     monkeypatch.setattr(predict_script, "build_eval_transform", lambda _: lambda image: torch.from_numpy(
         __import__("numpy").array(image, copy=True)
     ).permute(2, 0, 1).float().div_(255))
-    monkeypatch.setattr(predict_script, "build_model", lambda _: TinyModel())
-    monkeypatch.setattr(predict_script.torch, "load", lambda *args, **kwargs: {"model": {}})
+    monkeypatch.setattr(predict_script, "load_best_model", lambda *args: TinyModel().eval())
     monkeypatch.setattr(predict_script, "seed_everything", lambda _: None)
     predict_script.predict(str(run), tta=tta)
     assert (run / "submission.csv").read_bytes().startswith(b"id,label\n2,")

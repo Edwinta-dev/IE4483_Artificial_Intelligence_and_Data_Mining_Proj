@@ -64,3 +64,14 @@ def test_gallery_uses_loader_for_cifar_pseudo_paths(tmp_path):
         out = tmp_path / f"{kind}.png"
         _gallery(records, kind, "airplane", out, lambda r: Image.fromarray(pixels[r["index"]], mode="RGB"))
         assert out.exists()
+
+
+def test_multiclass_gallery_orders_uncertain_by_top_class_confidence(tmp_path):
+    from ie4483.evaluate import _gallery
+
+    records = [{"path": str(i), "index": i, "true": 0, "predicted": 0, "true_name": "a", "predicted_name": "a",
+                "confidence": confidence} for i, confidence in enumerate((0.9, 0.2, 0.5))]
+    shown = []
+    _gallery(records, "uncertain", "a", tmp_path / "g.png", lambda record: shown.append(record["index"]) or
+             Image.new("RGB", (4, 4)))
+    assert shown == [1, 2, 0]

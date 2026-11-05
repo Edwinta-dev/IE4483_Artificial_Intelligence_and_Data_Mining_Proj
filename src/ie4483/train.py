@@ -29,6 +29,7 @@ from ie4483.imbalance import (
     write_class_counts,
 )
 from ie4483.model import build_model
+from ie4483.runs import get_device
 from ie4483.seed import seed_everything
 from ie4483.transforms import (
     build_eval_transform,
@@ -275,7 +276,7 @@ def train(config: Config, run_root: str | Path | None = None, resume: str | Path
     run_root = Path(run_root) if run_root else Path("runs")
     run_dir = _prepare_run_dir(config, run_root, resume)
     (run_dir / "transforms.txt").write_text(_transform_description(config), encoding="utf-8")
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = get_device()
     model = build_model(config).to(device)
     train_ds, val_ds = (_cifar_datasets if config.dataset_kind == "cifar10" else _image_folder_datasets)(config, run_dir)
 
