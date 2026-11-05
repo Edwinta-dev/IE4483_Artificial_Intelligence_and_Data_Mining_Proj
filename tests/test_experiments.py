@@ -145,3 +145,19 @@ def test_summary_groups_dict_parameter_values(tmp_path):
     assert len(table) == 2
     assert statistics.mean([0.6, 0.7]) == pytest.approx(float(table[1]["mean"]))
     assert '{"1": 0.1}' in (tmp_path / "summary.md").read_text(encoding="utf-8")
+
+
+def test_sweep_config_resolves_relative_to_repo_root_and_errors_when_missing(tmp_path, monkeypatch):
+    from ie4483.experiments import _resolve_config
+
+    (tmp_path / "configs" / "sweeps").mkdir(parents=True)
+    (tmp_path / "configs" / "base.yaml").write_text("{}", encoding="utf-8")
+    spec = tmp_path / "configs" / "sweeps" / "s.yaml"
+    spec.write_text("{}", encoding="utf-8")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+
+    assert _resolve_config(spec, "configs/base.yaml") == tmp_path / "configs" / "base.yaml"
+    with pytest.raises(FileNotFoundError, match="sweep config not found"):
+        _resolve_config(spec, "configs/missing.yaml")

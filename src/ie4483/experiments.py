@@ -118,15 +118,23 @@ def _partial_run(seed_dir: Path) -> Path | None:
     return runs[-1] if runs else None
 
 
+def _resolve_config(spec_path: Path, configured: str | Path) -> Path:
+    """Resolve a sweep's ``config`` value: as given (cwd-relative), else relative to the sweep's repo root."""
+    candidate = Path(configured)
+    if candidate.is_absolute() or candidate.exists():
+        return candidate
+    # Sweep specs live in <root>/configs/sweeps/, so the repository root is three levels up.
+    from_root = spec_path.resolve().parents[2] / candidate
+    if from_root.exists():
+        return from_root
+    raise FileNotFoundError(f"sweep config not found: {configured} (named in {spec_path})")
+
+
 def sweep(sweep_path: str | Path, output: str | Path | None = None) -> list[dict[str, Any]]:
     """Execute each parameter combination and resume completed seed runs."""
     spec_path = Path(sweep_path)
     spec = yaml.safe_load(spec_path.read_text(encoding="utf-8")) or {}
-    config_path = (spec_path.parent.parent.parent / spec.get("config", "base.yaml")).resolve()
-    # A config path can also be explicitly relative to the current directory.
-    configured = Path(spec.get("config", "configs/base.yaml"))
-    if configured.exists():
-        config_path = configured
+    config_path = _resolve_config(spec_path, spec.get("config", "configs/base.yaml"))
     parameters = spec.get("parameters")
     seeds = spec.get("seeds")
     if not isinstance(parameters, dict) or not parameters or not all(isinstance(v, list) and v for v in parameters.values()):
