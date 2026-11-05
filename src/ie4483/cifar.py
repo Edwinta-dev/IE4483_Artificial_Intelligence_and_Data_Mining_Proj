@@ -7,10 +7,11 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import torch
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
+
+from ie4483.data import default_transform
 
 CIFAR10_CLASSES = ("airplane", "automobile", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck")
 CIFAR10_MEAN = (0.4914, 0.4822, 0.4465)
@@ -77,8 +78,4 @@ class CIFAR10Dataset(Dataset):
 
     def __getitem__(self, index: int) -> tuple[Any, int]:
         image = Image.fromarray(self.images[index], mode="RGB")
-        if self.transform:
-            image = self.transform(image)
-        else:
-            image = torch.from_numpy(np.array(image, copy=True)).permute(2, 0, 1).float().div_(255)
-        return image, int(self.labels[index])
+        return (self.transform or default_transform)(image), int(self.labels[index])

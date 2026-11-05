@@ -18,9 +18,30 @@ IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tif", ".tiff", ".we
 LOGGER = logging.getLogger(__name__)
 
 
-def _default_transform(image: Image.Image) -> torch.Tensor:
+def default_transform(image: Image.Image) -> torch.Tensor:
     """Convert RGB pixels to a float tensor in channel-first order."""
     return torch.from_numpy(np.array(image, copy=True)).permute(2, 0, 1).float().div_(255)
+
+
+def is_image_file(path: Path) -> bool:
+    """True for a regular file with a supported image extension."""
+    return path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES
+
+
+def is_readable_image(path: Path) -> bool:
+    """True when Pillow can open and verify ``path``."""
+    try:
+        with Image.open(path) as image:
+            image.verify()
+    except (OSError, ValueError, UnidentifiedImageError):
+        return False
+    return True
+
+
+def load_rgb(path: Path, transform: Callable[[Image.Image], Any]) -> Any:
+    """Open ``path`` as RGB and apply ``transform``."""
+    with Image.open(path) as image:
+        return transform(image.convert("RGB"))
 
 
 class ImageFolderDataset(Dataset):
@@ -44,24 +65,20 @@ class ImageFolderDataset(Dataset):
         self.split = split
         self.classes = tuple(classes)
         self.class_to_idx = {name: index for index, name in enumerate(classes)}
-        self.transform = transform or _default_transform
+        self.transform = transform or default_transform
         self.unreadable_count = 0
         self.samples: list[tuple[Path, int]] = []
         rng = random.Random(seed)
 
         for class_name, label in self.class_to_idx.items():
             folder = self.root / split / class_name
-            files = sorted(
-                (path for path in folder.iterdir() if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES),
-                key=lambda path: path.name,
-            ) if folder.is_dir() else []
+            files = sorted((path for path in folder.iterdir() if is_image_file(path)),
+                           key=lambda path: path.name) if folder.is_dir() else []
             readable: list[Path] = []
             for path in files:
-                try:
-                    with Image.open(path) as image:
-                        image.verify()
+                if is_readable_image(path):
                     readable.append(path)
-                except (OSError, ValueError, UnidentifiedImageError):
+                else:
                     self.unreadable_count += 1
                     LOGGER.warning("Skipping unreadable image: %s", path)
             if n_per_class is not None and len(readable) > n_per_class:
@@ -91,33 +108,27 @@ class ImageFolderDataset(Dataset):
 
     def __getitem__(self, index: int) -> tuple[Any, int]:
         path, label = self.samples[index]
-        with Image.open(path) as image:
-            image = image.convert("RGB")
-            image = self.transform(image)
-        return image, label
+        return load_rgb(path, self.transform), label
 
 
 class UnlabelledTestDataset(Dataset):
     """Unlabelled images named by numeric IDs in ``root/test``."""
 
     def __init__(self, root: str | Path, transform: Callable[[Image.Image], Any] | None = None) -> None:
-        self.transform = transform or _default_transform
+        self.transform = transform or default_transform
         folder = Path(root) / "test"
         self.samples: list[tuple[Path, int]] = []
         self.unreadable_count = 0
         if folder.is_dir():
             for path in folder.iterdir():
-                if not path.is_file() or path.suffix.lower() not in IMAGE_SUFFIXES:
+                if not is_image_file(path):
                     continue
                 try:
                     image_id = int(path.stem)
                 except ValueError:
                     LOGGER.warning("Skipping test image with non-numeric ID: %s", path)
                     continue
-                try:
-                    with Image.open(path) as image:
-                        image.verify()
-                except (OSError, ValueError, UnidentifiedImageError):
+                if not is_readable_image(path):
                     self.unreadable_count += 1
                     LOGGER.warning("Skipping unreadable image: %s", path)
                     continue
@@ -130,10 +141,7 @@ class UnlabelledTestDataset(Dataset):
 
     def __getitem__(self, index: int) -> tuple[Any, int]:
         path, image_id = self.samples[index]
-        with Image.open(path) as image:
-            image = image.convert("RGB")
-            image = self.transform(image)
-        return image, image_id
+        return load_rgb(path, self.transform), image_id
 
 
 def make_dataloader(

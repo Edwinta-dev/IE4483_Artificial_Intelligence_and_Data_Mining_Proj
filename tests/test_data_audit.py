@@ -87,3 +87,20 @@ def test_compare_lists_files_unique_to_each_root(tmp_path):
     report = audit_data(root, original)
     assert report["compare"] == {"root_only": ["train/cat/added.png"], "compare_only": ["train/cat/a.png"]}
     assert "train/cat/a.png" in (root / "audit.md").read_text(encoding="utf-8")
+
+
+def test_corrupt_validation_file_is_reported_unreadable_but_still_hashed(tmp_path):
+    from PIL import Image
+
+    from ie4483.data_audit import audit_data
+
+    for rel in ("train/cat", "train/dog", "val/cat", "val/dog", "test"):
+        (tmp_path / rel).mkdir(parents=True)
+    Image.new("RGB", (4, 4), "red").save(tmp_path / "train/cat/a.png")
+    (tmp_path / "val/cat/bad.png").write_bytes(b"not an image")
+    (tmp_path / "train/dog/bad.png").write_bytes(b"not an image")
+
+    report = audit_data(tmp_path)
+
+    assert report["unreadable_files"] == ["train/dog/bad.png", "val/cat/bad.png"]
+    assert report["train_validation_duplicates"] == ["val/cat/bad.png"]  # identical bytes still count as leakage

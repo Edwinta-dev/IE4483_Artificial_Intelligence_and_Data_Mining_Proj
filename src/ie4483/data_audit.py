@@ -10,14 +10,15 @@ from typing import Any
 
 from PIL import Image, UnidentifiedImageError
 
-IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tif", ".tiff", ".webp"}
+from ie4483.data import IMAGE_SUFFIXES, is_image_file
+
 EXPECTED_DIRS = ("train/cat", "train/dog", "val/cat", "val/dog", "test")
 
 
 def _image_files(folder: Path) -> list[Path]:
     if not folder.is_dir():
         return []
-    return sorted((p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in IMAGE_SUFFIXES), key=lambda p: p.name)
+    return sorted((p for p in folder.iterdir() if is_image_file(p)), key=lambda p: p.name)
 
 
 def _hash(path: Path) -> str:
@@ -42,39 +43,34 @@ def audit_data(root: str | Path, compare: str | Path | None = None) -> dict[str,
     root = Path(root)
     missing = [rel for rel in EXPECTED_DIRS if not (root / rel).is_dir()]
     counts: dict[str, Any] = {}
-    unreadable: list[str] = []
+    unreadable: set[str] = set()
     dimensions: list[tuple[int, int]] = []
-    hashes: dict[str, list[str]] = defaultdict(list)
-    paths: dict[str, list[Path]] = {}
+    # Each file is opened and hashed once; hashes are grouped by split for duplicate and leakage checks.
+    hashes: dict[str, dict[str, list[str]]] = {"train": defaultdict(list), "val": defaultdict(list),
+                                               "test": defaultdict(list)}
 
     for rel in EXPECTED_DIRS:
-        folder = root / rel
-        files = _image_files(folder)
-        paths[rel] = files
+        files = _image_files(root / rel)
         counts[rel] = len(files)
+        split = rel.split("/")[0]
         for path in files:
+            name = path.relative_to(root).as_posix()
             try:
                 with Image.open(path) as image:
                     image.verify()
                 with Image.open(path) as image:
                     dimensions.append((image.width, image.height))
             except (OSError, ValueError, UnidentifiedImageError):
-                unreadable.append(path.relative_to(root).as_posix())
-            if rel.startswith("train/"):
-                hashes[_hash(path)].append(path.relative_to(root).as_posix())
-
-    train_hashes = {digest for digest, names in hashes.items() if names}
-    split_hashes: dict[str, dict[str, list[str]]] = {"val": defaultdict(list), "test": defaultdict(list)}
-    for rel in ("val/cat", "val/dog", "test"):
-        for path in paths[rel]:
+                unreadable.add(name)
             try:
-                split = "test" if rel == "test" else "val"
-                split_hashes[split][_hash(path)].append(path.relative_to(root).as_posix())
+                hashes[split][_hash(path)].append(name)
             except OSError:
-                pass
-    validation_leakage = sorted(name for digest in train_hashes for name in split_hashes["val"].get(digest, []))
-    test_leakage = sorted(name for digest in train_hashes for name in split_hashes["test"].get(digest, []))
-    train_duplicates = [sorted(names) for names in hashes.values() if len(names) > 1]
+                unreadable.add(name)  # cannot be hashed, so it cannot take part in duplicate checks
+
+    train_hashes = hashes["train"]
+    validation_leakage = sorted(name for digest in train_hashes for name in hashes["val"].get(digest, []))
+    test_leakage = sorted(name for digest in train_hashes for name in hashes["test"].get(digest, []))
+    train_duplicates = [sorted(names) for names in train_hashes.values() if len(names) > 1]
 
     comparison = None
     if compare is not None:

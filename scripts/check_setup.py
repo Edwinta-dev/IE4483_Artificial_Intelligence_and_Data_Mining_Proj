@@ -7,9 +7,9 @@ import platform
 from pathlib import Path
 
 from ie4483.config import load_config
+from ie4483.data import is_image_file
 from ie4483.paths import resolve_data_root, weights_cache_dir
 
-IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp", ".tif", ".tiff"}
 WEIGHT_FILES = ("resnet18-f37072fd.pth", "resnet50-11ad3fa6.pth")
 
 
@@ -37,7 +37,7 @@ def inspect_setup(data_root: str | Path | None = None, cache_dir: str | Path | N
     lines.append(f"Data root: {root}")
     for relative in ("train/cat", "train/dog", "val/cat", "val/dog", "test"):
         folder = root / relative
-        count = sum(1 for item in folder.iterdir() if item.is_file() and item.suffix.lower() in IMAGE_SUFFIXES) if folder.is_dir() else 0
+        count = sum(1 for item in folder.iterdir() if is_image_file(item)) if folder.is_dir() else 0
         status = "" if folder.is_dir() else " (MISSING)"
         lines.append(f"  {relative}: {count} images{status}")
     return "\n".join(lines)
