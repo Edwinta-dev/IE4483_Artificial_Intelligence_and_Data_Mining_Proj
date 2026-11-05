@@ -46,8 +46,11 @@ def audit_data(root: str | Path, compare: str | Path | None = None) -> dict[str,
     unreadable: set[str] = set()
     dimensions: list[tuple[int, int]] = []
     # Each file is opened and hashed once; hashes are grouped by split for duplicate and leakage checks.
-    hashes: dict[str, dict[str, list[str]]] = {"train": defaultdict(list), "val": defaultdict(list),
-                                               "test": defaultdict(list)}
+    hashes: dict[str, dict[str, list[str]]] = {
+        "train": defaultdict(list),
+        "val": defaultdict(list),
+        "test": defaultdict(list),
+    }
 
     for rel in EXPECTED_DIRS:
         files = _image_files(root / rel)
@@ -75,10 +78,16 @@ def audit_data(root: str | Path, compare: str | Path | None = None) -> dict[str,
     comparison = None
     if compare is not None:
         other = Path(compare)
+
         def rel_files(base: Path) -> set[str]:
             if not base.is_dir():
                 return set()
-            return {p.relative_to(base).as_posix() for p in base.rglob("*") if p.is_file() and p.suffix.lower() in IMAGE_SUFFIXES}
+            return {
+                p.relative_to(base).as_posix()
+                for p in base.rglob("*")
+                if p.is_file() and p.suffix.lower() in IMAGE_SUFFIXES
+            }
+
         current, previous = rel_files(root), rel_files(other)
         comparison = {"root_only": sorted(current - previous), "compare_only": sorted(previous - current)}
 
@@ -88,7 +97,10 @@ def audit_data(root: str | Path, compare: str | Path | None = None) -> dict[str,
         "missing_directories": missing,
         "counts": counts,
         "unreadable_files": sorted(unreadable),
-        "image_dimensions": {"width": _distribution([w for w, _ in dimensions]), "height": _distribution([h for _, h in dimensions])},
+        "image_dimensions": {
+            "width": _distribution([w for w, _ in dimensions]),
+            "height": _distribution([h for _, h in dimensions]),
+        },
         "exact_duplicates_within_train": train_duplicates,
         "train_validation_duplicates": validation_leakage,
         "train_test_duplicates": test_leakage,
@@ -96,16 +108,34 @@ def audit_data(root: str | Path, compare: str | Path | None = None) -> dict[str,
     }
     root.mkdir(parents=True, exist_ok=True)
     (root / "audit.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-    lines = [f"# Data audit: {root}", "", f"Layout: {'OK' if not missing else 'MISSING ' + ', '.join(missing)}", "", "## Image counts"]
+    lines = [
+        f"# Data audit: {root}",
+        "",
+        f"Layout: {'OK' if not missing else 'MISSING ' + ', '.join(missing)}",
+        "",
+        "## Image counts",
+    ]
     lines.extend(f"- {rel}: {count}" for rel, count in counts.items())
     lines += ["", "## Image dimensions (width and height)"]
     for axis, stats in report["image_dimensions"].items():
         lines.append(f"- {axis}: min={stats['min']}, median={stats['median']}, max={stats['max']}")
-    for title, key in (("Unreadable files", "unreadable_files"), ("Exact duplicates within train", "exact_duplicates_within_train"), ("Train to validation duplicates", "train_validation_duplicates"), ("Train to test duplicates", "train_test_duplicates")):
+    for title, key in (
+        ("Unreadable files", "unreadable_files"),
+        ("Exact duplicates within train", "exact_duplicates_within_train"),
+        ("Train to validation duplicates", "train_validation_duplicates"),
+        ("Train to test duplicates", "train_test_duplicates"),
+    ):
         lines += ["", f"## {title}"]
         values = report[key]
-        lines.extend(("- " + (", ".join(v) if isinstance(v, list) else str(v))) for v in values) if values else lines.append("- None")
+        lines.extend(
+            ("- " + (", ".join(v) if isinstance(v, list) else str(v))) for v in values
+        ) if values else lines.append("- None")
     if comparison is not None:
-        lines += ["", "## Compare listing", "Files only in root: " + (", ".join(comparison["root_only"]) or "None"), "Files only in compare root: " + (", ".join(comparison["compare_only"]) or "None")]
+        lines += [
+            "",
+            "## Compare listing",
+            "Files only in root: " + (", ".join(comparison["root_only"]) or "None"),
+            "Files only in compare root: " + (", ".join(comparison["compare_only"]) or "None"),
+        ]
     (root / "audit.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     return report

@@ -15,6 +15,7 @@ def main() -> None:
     parser.add_argument("--root", default="data", help="data root (IE4483_DATA is used by default)")
     args = parser.parse_args()
     import os
+
     root = Path(args.root if args.root != "data" else os.environ.get("IE4483_DATA", "data"))
     root.mkdir(parents=True, exist_ok=True)
     destination = root / "cifar-10-python.tar.gz"

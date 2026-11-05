@@ -41,4 +41,3 @@ def test_test_dataset_numeric_id_sorting_and_loader(tmp_path):
     dataset = UnlabelledTestDataset(tmp_path / "data")
     assert [image_id for _, image_id in dataset.samples] == [1, 2, 10]
     assert [batch[1].tolist() for batch in make_dataloader(dataset, 2)] == [[1, 2], [10]]
-

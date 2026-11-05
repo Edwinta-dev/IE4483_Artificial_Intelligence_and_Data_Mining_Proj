@@ -39,8 +39,9 @@ def _batch(path: Path) -> tuple[np.ndarray, np.ndarray]:
 class CIFAR10Dataset(Dataset):
     """Labeled images from standard CIFAR-10 Python batches."""
 
-    def __init__(self, root: str | Path, split: str = "train", transform=None, seed: int = 42,
-                 val_fraction: float = 0.1) -> None:
+    def __init__(
+        self, root: str | Path, split: str = "train", transform=None, seed: int = 42, val_fraction: float = 0.1
+    ) -> None:
         self.root = Path(root) / "cifar-10-batches-py"
         self.transform = transform
         if split not in {"train", "val", "test"}:
@@ -70,8 +71,10 @@ class CIFAR10Dataset(Dataset):
     @property
     def samples(self) -> list[tuple[str, int]]:
         """Stable per-image identities for feature-cache keys."""
-        return [(f"cifar10/{'test' if self.split == 'test' else 'train'}/{int(i)}", int(label))
-                for i, label in zip(self.source_indices, self.labels)]
+        return [
+            (f"cifar10/{'test' if self.split == 'test' else 'train'}/{int(i)}", int(label))
+            for i, label in zip(self.source_indices, self.labels)
+        ]
 
     def __len__(self) -> int:
         return len(self.labels)

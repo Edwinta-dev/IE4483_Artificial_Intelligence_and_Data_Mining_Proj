@@ -20,8 +20,11 @@ def _tree(root: Path) -> None:
 
 
 def _hashes(folder: Path) -> dict[str, str]:
-    return {str(path.relative_to(folder)): hashlib.sha256(path.read_bytes()).hexdigest()
-            for path in folder.rglob("*") if path.is_file()}
+    return {
+        str(path.relative_to(folder)): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in folder.rglob("*")
+        if path.is_file()
+    }
 
 
 def test_seeded_adjustments_and_held_out_copies(tmp_path):

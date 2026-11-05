@@ -51,8 +51,9 @@ def _manifest(dataset) -> list[tuple[str, int]]:
     return [(str(path), int(label)) for path, label in dataset.samples]
 
 
-def _epoch(model, loader, criterion, device, *, optimizer=None, scaler=None, accumulation=1,
-           amp=False) -> tuple[float, float]:
+def _epoch(
+    model, loader, criterion, device, *, optimizer=None, scaler=None, accumulation=1, amp=False
+) -> tuple[float, float]:
     """One pass over ``loader``; trains when an ``optimizer`` is given, otherwise only evaluates.
 
     Returns ``(mean loss, accuracy)``. ``amp`` enables CUDA autocast (and ``scaler`` scales the training loss).
@@ -94,10 +95,13 @@ class _HeadOnly(nn.Module):
 def _rng_state(loader):
     # Plain lists/tensors only, so checkpoints load with ``weights_only=True`` (no ndarray unpickling).
     name, keys, position, has_gauss, cached_gaussian = np.random.get_state()
-    return {"python": random.getstate(), "numpy": (name, keys.tolist(), position, has_gauss, cached_gaussian),
-            "torch": torch.get_rng_state(),
-            "cuda": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
-            "loader": loader.generator.get_state() if loader.generator is not None else None}
+    return {
+        "python": random.getstate(),
+        "numpy": (name, keys.tolist(), position, has_gauss, cached_gaussian),
+        "torch": torch.get_rng_state(),
+        "cuda": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
+        "loader": loader.generator.get_state() if loader.generator is not None else None,
+    }
 
 
 def _restore_rng(state, loader):
@@ -119,8 +123,9 @@ def _atomic_save(payload, path):
     temporary.replace(path)
 
 
-def _fit(model, train_loader, val_loader, cfg, run_dir, device, *, checkpoint_model=None, resume=False,
-         class_weights=None):
+def _fit(
+    model, train_loader, val_loader, cfg, run_dir, device, *, checkpoint_model=None, resume=False, class_weights=None
+):
     model.to(device)
     accumulation = cfg.train.gradient_accumulation_steps
     head_params = list(model.head.parameters())
@@ -182,8 +187,16 @@ def _fit(model, train_loader, val_loader, cfg, run_dir, device, *, checkpoint_mo
                 for group, base_lr in zip(optimizer.param_groups, base_rates):
                     group["lr"] = base_lr * factor
             started = time.perf_counter()
-            train_loss, train_acc = _epoch(model, train_loader, criterion, device, optimizer=optimizer, scaler=scaler,
-                                           accumulation=accumulation, amp=amp)
+            train_loss, train_acc = _epoch(
+                model,
+                train_loader,
+                criterion,
+                device,
+                optimizer=optimizer,
+                scaler=scaler,
+                accumulation=accumulation,
+                amp=amp,
+            )
             val_loss, val_acc = _epoch(model, val_loader, criterion, device, amp=amp)
             lr = optimizer.param_groups[0]["lr"]
             writer.writerow((epoch, train_loss, train_acc, val_loss, val_acc, lr, time.perf_counter() - started))
@@ -191,8 +204,10 @@ def _fit(model, train_loader, val_loader, cfg, run_dir, device, *, checkpoint_mo
             if val_acc > best_acc:
                 best_acc = val_acc
                 saved_model = checkpoint_model if checkpoint_model is not None else model
-                _atomic_save({"model": saved_model.state_dict(), "epoch": epoch, "val_acc": val_acc,
-                              "val_loss": val_loss}, run_dir / "best.pt")
+                _atomic_save(
+                    {"model": saved_model.state_dict(), "epoch": epoch, "val_acc": val_acc, "val_loss": val_loss},
+                    run_dir / "best.pt",
+                )
             # Early stopping tracks validation *loss* (best.pt tracks accuracy). ``stale`` counts consecutive epochs
             # without a new loss minimum; training stops once it exceeds ``patience`` (so patience=3 tolerates
             # three such epochs and stops after the fourth, and patience=0 stops at the first regression).
@@ -203,11 +218,21 @@ def _fit(model, train_loader, val_loader, cfg, run_dir, device, *, checkpoint_mo
                 stale += 1
             if scheduler is not None and epoch > cfg.train.warmup_epochs:
                 scheduler.step()
-            _atomic_save({"model": (checkpoint_model or model).state_dict(), "training_model": model.state_dict(),
-                          "optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict() if scheduler else None,
-                          "scaler": scaler.state_dict(), "epoch": epoch, "best_val_acc": best_acc,
-                          "min_val_loss": min_val_loss, "patience": stale, "rng": _rng_state(train_loader)},
-                         checkpoint_path)
+            _atomic_save(
+                {
+                    "model": (checkpoint_model or model).state_dict(),
+                    "training_model": model.state_dict(),
+                    "optimizer": optimizer.state_dict(),
+                    "scheduler": scheduler.state_dict() if scheduler else None,
+                    "scaler": scaler.state_dict(),
+                    "epoch": epoch,
+                    "best_val_acc": best_acc,
+                    "min_val_loss": min_val_loss,
+                    "patience": stale,
+                    "rng": _rng_state(train_loader),
+                },
+                checkpoint_path,
+            )
             if stale > cfg.train.patience:
                 LOGGER.info("Early stopping after epoch %d", epoch)
                 break
@@ -243,14 +268,22 @@ def _cifar_datasets(config: Config, run_dir: Path):
         train_ds, counts = imbalanced_subset(train_ds, config.train.imbalance_fractions, seed)
     else:
         counts = {label: int((train_ds.labels == label).sum()) for label in range(len(config.data.classes))}
-    write_class_counts(run_dir / "class_counts.json", {config.data.classes[label]: count for label, count in counts.items()})
+    write_class_counts(
+        run_dir / "class_counts.json", {config.data.classes[label]: count for label, count in counts.items()}
+    )
     return train_ds, val_ds
 
 
 def _image_folder_datasets(config: Config, run_dir: Path):
     seed, classes = config.train.seed, config.data.classes
-    train_ds = ImageFolderDataset(config.data_root, "train", classes, build_train_transform(config, seed),
-                                  seed=seed, manifest_path=run_dir / "manifest.csv")
+    train_ds = ImageFolderDataset(
+        config.data_root,
+        "train",
+        classes,
+        build_train_transform(config, seed),
+        seed=seed,
+        manifest_path=run_dir / "manifest.csv",
+    )
     val_ds = ImageFolderDataset(config.data_root, "val", classes, build_eval_transform(config), seed=seed)
     return train_ds, val_ds
 
@@ -258,14 +291,22 @@ def _image_folder_datasets(config: Config, run_dir: Path):
 def _cached_features(config: Config, model, train_ds, val_ds, run_root: Path, device: torch.device):
     """Pooled frozen-backbone features for both splits, built once per distinct input set."""
     manifest = [entry for ds in (train_ds, val_ds) for entry in _manifest(ds)]
-    key = feature_cache_key({"model": dataclasses.asdict(config.model), "data": dataclasses.asdict(config.data)}, manifest)
+    key = feature_cache_key(
+        {"model": dataclasses.asdict(config.model), "data": dataclasses.asdict(config.data)}, manifest
+    )
     path = run_root / "feature_cache" / f"{key}.pt"
     train_cfg, eval_cfg = config.train, config.eval
-    payload, reused = load_or_create_cache(path, lambda: {
-        "train": extract_features(model, make_dataloader(train_ds, train_cfg.batch_size, train_cfg.num_workers,
-                                                         seed=train_cfg.seed), device),
-        "val": extract_features(model, make_dataloader(val_ds, eval_cfg.batch_size, eval_cfg.num_workers), device),
-    })
+    payload, reused = load_or_create_cache(
+        path,
+        lambda: {
+            "train": extract_features(
+                model,
+                make_dataloader(train_ds, train_cfg.batch_size, train_cfg.num_workers, seed=train_cfg.seed),
+                device,
+            ),
+            "val": extract_features(model, make_dataloader(val_ds, eval_cfg.batch_size, eval_cfg.num_workers), device),
+        },
+    )
     LOGGER.info("Using %s frozen feature cache at %s", "reused" if reused else "built", path)
     return payload["train"], payload["val"]
 
@@ -295,11 +336,14 @@ def train(config: Config, run_root: str | Path | None = None, resume: str | Path
     (run_dir / "transforms.txt").write_text(_transform_description(config), encoding="utf-8")
     device = get_device()
     model = build_model(config).to(device)
-    train_ds, val_ds = (_cifar_datasets if config.dataset_kind == "cifar10" else _image_folder_datasets)(config, run_dir)
+    train_ds, val_ds = (_cifar_datasets if config.dataset_kind == "cifar10" else _image_folder_datasets)(
+        config, run_dir
+    )
 
     sampler = balanced_sampler(_dataset_labels(train_ds), settings.seed) if settings.weighted_sampler else None
-    class_weight_values = (class_weights(_dataset_labels(train_ds), len(config.data.classes)).tolist()
-                           if settings.class_weighted else None)
+    class_weight_values = (
+        class_weights(_dataset_labels(train_ds), len(config.data.classes)).tolist() if settings.class_weighted else None
+    )
     frozen = model.freeze_mode == "frozen"
     augment = _uses_augmentation(config)
     use_cache = settings.feature_cache == "auto" and frozen and not augment
@@ -307,13 +351,25 @@ def train(config: Config, run_root: str | Path | None = None, resume: str | Path
     if use_cache:
         train_data, val_data = _cached_features(config, model, train_ds, val_ds, run_root, device)
         # Cached features keep the training-set order, so the balanced sampler's weights still line up.
-        train_loader = make_dataloader(TensorDataset(*train_data), settings.batch_size, shuffle=sampler is None,
-                                       seed=settings.seed, sampler=sampler)
+        train_loader = make_dataloader(
+            TensorDataset(*train_data),
+            settings.batch_size,
+            shuffle=sampler is None,
+            seed=settings.seed,
+            sampler=sampler,
+        )
         val_loader = make_dataloader(TensorDataset(*val_data), config.eval.batch_size)
-        return _fit(_HeadOnly(model.head), train_loader, val_loader, config, run_dir, device,
-                    checkpoint_model=model, **fit_args)
+        return _fit(
+            _HeadOnly(model.head), train_loader, val_loader, config, run_dir, device, checkpoint_model=model, **fit_args
+        )
     LOGGER.info("Using image training path (cache=%s, frozen=%s, augment=%s)", settings.feature_cache, frozen, augment)
-    train_loader = make_dataloader(train_ds, settings.batch_size, settings.num_workers, shuffle=sampler is None,
-                                   seed=settings.seed, sampler=sampler)
+    train_loader = make_dataloader(
+        train_ds,
+        settings.batch_size,
+        settings.num_workers,
+        shuffle=sampler is None,
+        seed=settings.seed,
+        sampler=sampler,
+    )
     val_loader = make_dataloader(val_ds, config.eval.batch_size, config.eval.num_workers)
     return _fit(model, train_loader, val_loader, config, run_dir, device, **fit_args)

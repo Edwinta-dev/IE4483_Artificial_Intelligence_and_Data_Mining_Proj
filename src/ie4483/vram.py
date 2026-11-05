@@ -53,7 +53,8 @@ def check_fits_device(peak_bytes: int, total_bytes: int) -> int:
     """
     if peak_bytes > total_bytes:
         raise torch.cuda.OutOfMemoryError(
-            f"peak {peak_bytes} bytes exceeds device memory {total_bytes} bytes (shared-memory spill)")
+            f"peak {peak_bytes} bytes exceeds device memory {total_bytes} bytes (shared-memory spill)"
+        )
     return peak_bytes
 
 

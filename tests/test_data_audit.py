@@ -75,7 +75,10 @@ def test_train_validation_duplicate_causes_exit_one(tmp_path):
     (root / "val/cat/leak.png").write_bytes((root / "train/cat/a.png").read_bytes())
     result = run_cli(root)
     assert result.returncode == 1
-    assert "val/cat/leak.png" in json.loads((root / "audit.json").read_text(encoding="utf-8"))["train_validation_duplicates"]
+    assert (
+        "val/cat/leak.png"
+        in json.loads((root / "audit.json").read_text(encoding="utf-8"))["train_validation_duplicates"]
+    )
 
 
 def test_compare_lists_files_unique_to_each_root(tmp_path):

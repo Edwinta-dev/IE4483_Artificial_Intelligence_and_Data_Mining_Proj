@@ -18,3 +18,17 @@ packages = ["src/ie4483"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+# Long prose and YAML fixture strings.
+"tests/*" = ["E501"]
+"scripts/cifar_report.py" = ["E501"]
+"scripts/classification_figure.py" = ["E501"]
+"scripts/export_report_summary.py" = ["E501"]

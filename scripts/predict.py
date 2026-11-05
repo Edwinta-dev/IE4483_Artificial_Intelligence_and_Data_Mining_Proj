@@ -48,8 +48,12 @@ def predict(run: str, tta: str | None = None) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", required=True, help="run folder containing config.yaml and best.pt")
-    parser.add_argument("--tta", choices=("flip",), default=None,
-                        help="average probabilities for original and horizontally flipped images")
+    parser.add_argument(
+        "--tta",
+        choices=("flip",),
+        default=None,
+        help="average probabilities for original and horizontally flipped images",
+    )
     args = parser.parse_args()
     predict(args.run, args.tta)
 

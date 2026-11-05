@@ -18,14 +18,10 @@ def _write_run(path: Path, accuracy: float, *, submission: bool = False) -> None
         "epoch,train_loss,train_acc,val_loss,val_acc,lr,seconds\n1,0.4,0.8,0.3,0.75,0.01,2\n",
         encoding="utf-8",
     )
-    (path / "val_predictions.csv").write_text(
-        "path,true,predicted,p_dog\na,0,0,0.1\nb,1,0,0.4\n", encoding="utf-8"
-    )
+    (path / "val_predictions.csv").write_text("path,true,predicted,p_dog\na,0,0,0.1\nb,1,0,0.4\n", encoding="utf-8")
     if submission:
         (path / "submission.csv").write_text("id,label\n1,0\n2,1\n", encoding="utf-8")
-        (path / "test_predictions.csv").write_text(
-            "id,p_dog,p_cat\n1,0.2,0.8\n2,0.8,0.2\n", encoding="utf-8"
-        )
+        (path / "test_predictions.csv").write_text("id,p_dog,p_cat\n1,0.2,0.8\n2,0.8,0.2\n", encoding="utf-8")
 
 
 def _fixture_repo(root: Path) -> Path:

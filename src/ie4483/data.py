@@ -72,8 +72,11 @@ class ImageFolderDataset(Dataset):
 
         for class_name, label in self.class_to_idx.items():
             folder = self.root / split / class_name
-            files = sorted((path for path in folder.iterdir() if is_image_file(path)),
-                           key=lambda path: path.name) if folder.is_dir() else []
+            files = (
+                sorted((path for path in folder.iterdir() if is_image_file(path)), key=lambda path: path.name)
+                if folder.is_dir()
+                else []
+            )
             readable: list[Path] = []
             for path in files:
                 if is_readable_image(path):

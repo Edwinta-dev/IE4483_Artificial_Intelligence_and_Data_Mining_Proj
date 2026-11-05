@@ -25,7 +25,9 @@ def feature_cache_key(config: Any, manifest: list[tuple[str, int]]) -> str:
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
 
-def extract_features(model: torch.nn.Module, loader: DataLoader, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+def extract_features(
+    model: torch.nn.Module, loader: DataLoader, device: torch.device
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Run a frozen ResNet once and retain pooled features and labels on CPU."""
     model.eval()
     features, labels = [], []
@@ -36,8 +38,10 @@ def extract_features(model: torch.nn.Module, loader: DataLoader, device: torch.d
             features.append(output.detach().cpu())
             labels.append(torch.as_tensor(target).cpu())
     width = getattr(model, "feature_dim", 0)
-    return (torch.cat(features) if features else torch.empty((0, width)),
-            torch.cat(labels) if labels else torch.empty((0,), dtype=torch.long))
+    return (
+        torch.cat(features) if features else torch.empty((0, width)),
+        torch.cat(labels) if labels else torch.empty((0,), dtype=torch.long),
+    )
 
 
 def load_or_create_cache(path: str | Path, builder):

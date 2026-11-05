@@ -60,8 +60,10 @@ def preprocess_images(input_dir: Path, output_dir: Path, image_size: tuple[int, 
 
     image_files = sorted(
         (path for path in input_dir.rglob("*") if path.is_file() and path.suffix.lower() in SUPPORTED_FORMATS),
-        key=lambda path: (SPLIT_ORDER.get(path.relative_to(input_dir).parts[0], len(SPLIT_ORDER)),
-                          path.relative_to(input_dir).as_posix()),
+        key=lambda path: (
+            SPLIT_ORDER.get(path.relative_to(input_dir).parts[0], len(SPLIT_ORDER)),
+            path.relative_to(input_dir).as_posix(),
+        ),
     )
     if not image_files:
         LOGGER.warning("No supported image files found in %s.", input_dir)
@@ -69,8 +71,14 @@ def preprocess_images(input_dir: Path, output_dir: Path, image_size: tuple[int, 
 
     output_dir.mkdir(parents=True, exist_ok=True)
     removed = _clean_generated_splits(output_dir)
-    LOGGER.info("Input %s -> output %s: %d images at %dx%d (removed %d stale output images)",
-                input_dir, output_dir, len(image_files), *image_size, removed)
+    LOGGER.info(
+        "Input %s -> output %s: %d images at %dx%d (removed %d stale output images)",
+        input_dir,
+        output_dir,
+        len(image_files),
+        *image_size,
+        removed,
+    )
 
     processed, failed = 0, []
     folder_count: Counter[Path] = Counter()
@@ -103,8 +111,9 @@ def preprocess_images(input_dir: Path, output_dir: Path, image_size: tuple[int, 
 def main() -> None:
     root = repo_root()
     parser = argparse.ArgumentParser(description="Resize the raw dataset to 224x224 JPEGs.")
-    parser.add_argument("--input", type=Path, default=root / "raw-data" / "datasets",
-                        help="folder holding train/, val/, test/")
+    parser.add_argument(
+        "--input", type=Path, default=root / "raw-data" / "datasets", help="folder holding train/, val/, test/"
+    )
     parser.add_argument("--output", type=Path, default=root / "data", help="the pipeline's data root")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")

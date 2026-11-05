@@ -18,8 +18,7 @@ from scripts.sweep import write_report
 
 def test_sweep_cli_help_bootstraps_src_layout():
     script = Path(__file__).resolve().parents[1] / "scripts" / "sweep.py"
-    result = subprocess.run([sys.executable, str(script), "--help"], check=False,
-                            capture_output=True, text=True)
+    result = subprocess.run([sys.executable, str(script), "--help"], check=False, capture_output=True, text=True)
     assert result.returncode == 0
     assert "--sweep" in result.stdout
 
@@ -33,8 +32,13 @@ def test_gpu_report_uses_completed_metrics_and_rejects_proxy(tmp_path):
         encoding="utf-8",
     )
     (run / "val_metrics.json").write_text('{"accuracy": 0.82}', encoding="utf-8")
-    row = {"model.architecture": "resnet18", "model.freeze_mode": "frozen",
-           "seed": 42, "run": str(run), "val_accuracy": 0.82}
+    row = {
+        "model.architecture": "resnet18",
+        "model.freeze_mode": "frozen",
+        "seed": 42,
+        "run": str(run),
+        "val_accuracy": 0.82,
+    }
     report = tmp_path / "sweep_results.md"
     result = write_report([row], report)
     assert result[0]["best_val_accuracy"] == pytest.approx(0.82)
@@ -65,19 +69,35 @@ def test_two_by_one_sweep_aggregates_runs_resumes_and_writes_chart(tmp_path, mon
     data = tmp_path / "images"
     _dataset(data)
     config = tmp_path / "config.yaml"
-    config.write_text(yaml.safe_dump({
-        "data": {"root": str(data), "image_size": 32},
-        "model": {"architecture": "resnet18", "pretrained": False, "freeze_backbone": True},
-        "train": {"batch_size": 2, "epochs": 1, "learning_rate": 0.001,
-                  "mixed_precision": False, "gradient_accumulation_steps": 1},
-        "eval": {"batch_size": 2},
-    }), encoding="utf-8")
+    config.write_text(
+        yaml.safe_dump(
+            {
+                "data": {"root": str(data), "image_size": 32},
+                "model": {"architecture": "resnet18", "pretrained": False, "freeze_backbone": True},
+                "train": {
+                    "batch_size": 2,
+                    "epochs": 1,
+                    "learning_rate": 0.001,
+                    "mixed_precision": False,
+                    "gradient_accumulation_steps": 1,
+                },
+                "eval": {"batch_size": 2},
+            }
+        ),
+        encoding="utf-8",
+    )
     sweep_file = tmp_path / "sweep.yaml"
-    sweep_file.write_text(yaml.safe_dump({
-        "config": str(config), "seeds": [0, 1],
-        "overrides": ["train.batch_size=1"],
-        "parameters": {"train.learning_rate": [0.001, 0.002]},
-    }), encoding="utf-8")
+    sweep_file.write_text(
+        yaml.safe_dump(
+            {
+                "config": str(config),
+                "seeds": [0, 1],
+                "overrides": ["train.batch_size=1"],
+                "parameters": {"train.learning_rate": [0.001, 0.002]},
+            }
+        ),
+        encoding="utf-8",
+    )
     output = tmp_path / "results"
     calls = 0
     original = experiments._run_one
@@ -134,12 +154,16 @@ def test_seed_summary_includes_per_seed_mean_and_std(tmp_path, monkeypatch):
         table = list(csv.DictReader(stream))
     assert [float(row["mean"]) for row in table] == [0.5, 0.5]
     assert [float(row["std"]) for row in table] == [statistics.stdev([0.25, 0.75])] * 2
-    assert "Mean: 0.500000; standard deviation: 0.353553" in (tmp_path / "seeds" / "summary.md").read_text(encoding="utf-8")
+    assert "Mean: 0.500000; standard deviation: 0.353553" in (tmp_path / "seeds" / "summary.md").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_summary_groups_dict_parameter_values(tmp_path):
-    rows = [{"train.imbalance_fractions": value, "seed": seed, "run": f"r{seed}", "val_accuracy": acc}
-            for value, seed, acc in [(None, 0, 0.8), (None, 1, 0.9), ({"1": 0.1}, 0, 0.6), ({"1": 0.1}, 1, 0.7)]]
+    rows = [
+        {"train.imbalance_fractions": value, "seed": seed, "run": f"r{seed}", "val_accuracy": acc}
+        for value, seed, acc in [(None, 0, 0.8), (None, 1, 0.9), ({"1": 0.1}, 0, 0.6), ({"1": 0.1}, 1, 0.7)]
+    ]
     experiments._write_summary(rows, tmp_path, ["train.imbalance_fractions"])
     table = list(csv.DictReader((tmp_path / "summary.csv").open(encoding="utf-8")))
     assert len(table) == 2

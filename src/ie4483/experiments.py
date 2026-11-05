@@ -26,8 +26,9 @@ def _override(key: str, value: Any) -> str:
     return f"{key}={yaml.safe_dump(value, default_flow_style=True).strip()}"
 
 
-def _run_one(config_path: str | Path, seed: int, run_root: Path, overrides: list[str],
-             resume_dir: Path | None = None) -> tuple[Path, float]:
+def _run_one(
+    config_path: str | Path, seed: int, run_root: Path, overrides: list[str], resume_dir: Path | None = None
+) -> tuple[Path, float]:
     all_overrides = [*overrides, f"train.seed={seed}"]
     config = load_config(config_path, all_overrides)
     run_dir = train(config, run_root, resume=resume_dir)
@@ -63,19 +64,24 @@ def _write_summary(rows: list[dict[str, Any]], output: Path, dimensions: list[st
         seed_ids = sorted({row["seed"] for row in rows})
         fields = dimensions + ["seed_count", "mean", "std"] + [f"seed_{seed}_accuracy" for seed in seed_ids]
         csv_rows = []
-        lines = ["# Experiment summary", "",
-                 "| " + " | ".join([*dimensions, "Seeds", "Mean validation accuracy ± std"]) + " |",
-                 "|" + "|".join(["---"] * (len(dimensions) + 2)) + "|"]
+        lines = [
+            "# Experiment summary",
+            "",
+            "| " + " | ".join([*dimensions, "Seeds", "Mean validation accuracy ± std"]) + " |",
+            "|" + "|".join(["---"] * (len(dimensions) + 2)) + "|",
+        ]
         for key, entries in grouped.items():
             values = [float(entry["val_accuracy"]) for entry in entries]
             average, spread = _mean_std(values)
-            csv_rows.append({
-                **dict(zip(dimensions, key)),
-                "seed_count": len(values),
-                "mean": average,
-                "std": spread,
-                **{f"seed_{entry['seed']}_accuracy": entry["val_accuracy"] for entry in entries},
-            })
+            csv_rows.append(
+                {
+                    **dict(zip(dimensions, key)),
+                    "seed_count": len(values),
+                    "mean": average,
+                    "std": spread,
+                    **{f"seed_{entry['seed']}_accuracy": entry["val_accuracy"] for entry in entries},
+                }
+            )
             lines.append("| " + " | ".join(map(str, [*key, len(values), f"{average:.6f} ± {spread:.6f}"])) + " |")
     else:
         fields = ["seed", "run", "val_accuracy"]
@@ -95,8 +101,9 @@ def _write_summary(rows: list[dict[str, Any]], output: Path, dimensions: list[st
     (output / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def run_seeds(config_path: str | Path, seeds: list[int], output: str | Path,
-              overrides: list[str] | None = None) -> list[dict[str, Any]]:
+def run_seeds(
+    config_path: str | Path, seeds: list[int], output: str | Path, overrides: list[str] | None = None
+) -> list[dict[str, Any]]:
     """Train and evaluate one run per seed, saving per-seed and aggregate metrics."""
     if not seeds:
         raise ValueError("at least one seed is required")
@@ -146,7 +153,11 @@ def sweep(sweep_path: str | Path, output: str | Path | None = None) -> list[dict
     config_path = _resolve_config(spec_path, spec.get("config", "configs/base.yaml"))
     parameters = spec.get("parameters")
     seeds = spec.get("seeds")
-    if not isinstance(parameters, dict) or not parameters or not all(isinstance(v, list) and v for v in parameters.values()):
+    if (
+        not isinstance(parameters, dict)
+        or not parameters
+        or not all(isinstance(v, list) and v for v in parameters.values())
+    ):
         raise ValueError("sweep parameters must map config keys to non-empty lists")
     if not isinstance(seeds, list) or not seeds:
         raise ValueError("sweep seeds must be a non-empty list")
@@ -169,14 +180,14 @@ def sweep(sweep_path: str | Path, output: str | Path | None = None) -> list[dict
                 accuracy = float(metrics["accuracy"])
             else:
                 overrides = [*shared_overrides, *(_override(key, value) for key, value in cell.items())]
-                run_dir, accuracy = _run_one(config_path, int(seed), seed_dir, overrides,
-                                             _partial_run(seed_dir))
+                run_dir, accuracy = _run_one(config_path, int(seed), seed_dir, overrides, _partial_run(seed_dir))
             rows.append({**cell, "seed": seed, "run": str(run_dir), "val_accuracy": accuracy})
         _write_summary(rows, output, dimensions)
     # Order cells by mean validation accuracy; ties keep their declared grid order.
     by_cell = _group_rows(rows, dimensions)
-    cells = sorted(by_cell, key=lambda cell: _mean_std([float(row["val_accuracy"]) for row in by_cell[cell]])[0],
-                   reverse=True)
+    cells = sorted(
+        by_cell, key=lambda cell: _mean_std([float(row["val_accuracy"]) for row in by_cell[cell]])[0], reverse=True
+    )
     ordered_rows = [row for cell in cells for row in by_cell[cell]]
     _write_summary(ordered_rows, output, dimensions)
     stats = [_mean_std([float(row["val_accuracy"]) for row in by_cell[cell]]) for cell in cells]

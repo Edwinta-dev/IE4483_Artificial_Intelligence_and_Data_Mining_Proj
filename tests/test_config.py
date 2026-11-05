@@ -82,6 +82,9 @@ def test_dataset_kind_is_explicit_or_inferred_from_class_count():
 
     assert Config().dataset_kind == "imagefolder"
     assert Config(data=DataConfig(classes=[str(i) for i in range(10)])).dataset_kind == "cifar10"
-    assert Config(data=DataConfig(classes=[str(i) for i in range(10)], dataset="imagefolder")).dataset_kind == "imagefolder"
+    assert (
+        Config(data=DataConfig(classes=[str(i) for i in range(10)], dataset="imagefolder")).dataset_kind
+        == "imagefolder"
+    )
     with pytest.raises(ValueError, match="'data.dataset' must be one of imagefolder, cifar10"):
         load_config(BASE, ["data.dataset=imagenet"])

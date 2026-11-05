@@ -44,6 +44,7 @@ def test_training_curves_mark_epoch_with_highest_validation_accuracy(tmp_path, m
     assert [list(line.get_xdata()) for line in captured["fig"].axes[0].lines[-1:]] == [[3, 3]]
     assert "Best epoch 3" in captured["fig"].axes[0].lines[-1].get_label()
     import matplotlib.pyplot as plt
+
     plt.close(captured["fig"])
 
 
@@ -66,8 +67,9 @@ def test_run_report_tables_and_artifacts_include_proxy_label(tmp_path) -> None:
     )
     (run / "transforms.txt").write_text("flip", encoding="utf-8")
     (run / "metrics.csv").write_text(
-        "epoch,train_loss,train_acc,val_loss,val_acc,lr,seconds\n"
-        "1,1,0.5,1.2,0.4,0.01,2\n2,0.5,0.8,0.6,0.9,0.01,4\n", encoding="utf-8")
+        "epoch,train_loss,train_acc,val_loss,val_acc,lr,seconds\n1,1,0.5,1.2,0.4,0.01,2\n2,0.5,0.8,0.6,0.9,0.01,4\n",
+        encoding="utf-8",
+    )
     output = tmp_path / "report"
     summaries = report_figures([run], output)
     with (output / "comparison.csv").open(newline="", encoding="utf-8") as stream:

@@ -51,18 +51,20 @@ def _runs(run_root: Path) -> list[dict[str, Any]]:
                 if "cat" not in per_class:
                     raise ValueError(f"{metrics_path} is missing cat metrics")
                 seed = int(metrics_path.parent.parent.name.removeprefix("seed_"))
-                rows.append({
-                    "run": str(metrics_path.parent.relative_to(run_root.parent.parent)).replace("\\", "/"),
-                    "backbone": run_config["model"]["architecture"],
-                    "fix": fix,
-                    "seed": seed,
-                    "test_accuracy": float(metrics["accuracy"]),
-                    "macro_f1": float(metrics["macro_f1"]),
-                    "macro_recall": float(metrics["macro_recall"]),
-                    "cat_recall": float(per_class["cat"]["recall"]),
-                    "cat_precision": float(per_class["cat"]["precision"]),
-                    "confusion_matrix": metrics["confusion_matrix"],
-                })
+                rows.append(
+                    {
+                        "run": str(metrics_path.parent.relative_to(run_root.parent.parent)).replace("\\", "/"),
+                        "backbone": run_config["model"]["architecture"],
+                        "fix": fix,
+                        "seed": seed,
+                        "test_accuracy": float(metrics["accuracy"]),
+                        "macro_f1": float(metrics["macro_f1"]),
+                        "macro_recall": float(metrics["macro_recall"]),
+                        "cat_recall": float(per_class["cat"]["recall"]),
+                        "cat_precision": float(per_class["cat"]["precision"]),
+                        "confusion_matrix": metrics["confusion_matrix"],
+                    }
+                )
     if len(rows) != EXPECTED_RUNS:
         raise ValueError(f"expected {EXPECTED_RUNS} completed CIFAR runs, found {len(rows)}")
     return rows
@@ -82,10 +84,17 @@ def generate_report(run_root: Path, report_dir: Path, figures_dir: Path, markdow
         writer.writeheader()
         writer.writerows(public_rows)
 
-    groups: dict[str, list[dict[str, Any]]] = {name: [row for row in rows if row["fix"] == name] for name in ["none", *FIXES.values()]}
+    groups: dict[str, list[dict[str, Any]]] = {
+        name: [row for row in rows if row["fix"] == name] for name in ["none", *FIXES.values()]
+    }
     summaries = {
-        fix: {metric: {"mean": _mean_std([row[metric] for row in items])[0], "std": _mean_std([row[metric] for row in items])[1]}
-              for metric in ("test_accuracy", "cat_recall")}
+        fix: {
+            metric: {
+                "mean": _mean_std([row[metric] for row in items])[0],
+                "std": _mean_std([row[metric] for row in items])[1],
+            }
+            for metric in ("test_accuracy", "cat_recall")
+        }
         for fix, items in groups.items()
     }
     cats_missed = {}
@@ -98,7 +107,8 @@ def generate_report(run_root: Path, report_dir: Path, figures_dir: Path, markdow
         "cat_row_mean_counts": cats_missed,
         "confusion_matrices": {
             row["fix"] + ("_" + row["backbone"] if row["fix"] == "balanced" else ""): row["confusion_matrix"]
-            for row in rows if (row["fix"] == "none" and row["seed"] == 0)
+            for row in rows
+            if (row["fix"] == "none" and row["seed"] == 0)
             or (row["fix"] == "balanced" and row["backbone"] == "resnet50")
         },
     }
@@ -110,8 +120,15 @@ def generate_report(run_root: Path, report_dir: Path, figures_dir: Path, markdow
         normalized = [[value / sum(line) if sum(line) else 0 for value in line] for line in matrix]
         fig, ax = plt.subplots(figsize=(8, 7))
         image = ax.imshow(normalized, cmap="Blues", vmin=0, vmax=1)
-        ax.set(xticks=range(10), yticks=range(10), xticklabels=CLASSES, yticklabels=CLASSES,
-               xlabel="Predicted class", ylabel="True class", title=f"{key.replace('_', ' ').title()} test confusion")
+        ax.set(
+            xticks=range(10),
+            yticks=range(10),
+            xticklabels=CLASSES,
+            yticklabels=CLASSES,
+            xlabel="Predicted class",
+            ylabel="True class",
+            title=f"{key.replace('_', ' ').title()} test confusion",
+        )
         plt.setp(ax.get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor")
         fig.colorbar(image, ax=ax, label="Row fraction")
         fig.tight_layout()
@@ -126,10 +143,18 @@ def generate_report(run_root: Path, report_dir: Path, figures_dir: Path, markdow
         stds = [summaries[name][metric]["std"] for name in labels]
         ax.bar([i + offset for i in x], means, width=0.34, yerr=stds, capsize=4, label=label)
     ref = next(row["cat_recall"] for row in rows if row["fix"] == "balanced" and row["backbone"] == "resnet18")
-    ref_accuracy = next(row["test_accuracy"] for row in rows if row["fix"] == "balanced" and row["backbone"] == "resnet18")
+    ref_accuracy = next(
+        row["test_accuracy"] for row in rows if row["fix"] == "balanced" and row["backbone"] == "resnet18"
+    )
     ax.axhline(ref, color="black", linestyle="--", label="Balanced ResNet-18 cat recall")
     ax.axhline(ref_accuracy, color="gray", linestyle=":", label="Balanced ResNet-18 accuracy")
-    ax.set(xticks=x, xticklabels=labels, ylim=(0, 1), ylabel="Test score", title="Cat recall and overall accuracy by imbalance fix")
+    ax.set(
+        xticks=x,
+        xticklabels=labels,
+        ylim=(0, 1),
+        ylabel="Test score",
+        title="Cat recall and overall accuracy by imbalance fix",
+    )
     ax.legend()
     fig.tight_layout()
     fig.savefig(figures_dir / "cifar_fix_comparison.png", dpi=FIGURE_DPI)
@@ -141,8 +166,13 @@ def generate_report(run_root: Path, report_dir: Path, figures_dir: Path, markdow
     best_fix = max(FIXES.values(), key=lambda name: summaries[name]["cat_recall"]["mean"])
     best_recovery = summaries[best_fix]["cat_recall"]["mean"] - none["cat_recall"]["mean"]
     cost = summaries[best_fix]["test_accuracy"]["mean"] - none["test_accuracy"]["mean"]
-    dog_change = statistics.mean(row["confusion_matrix"][5][5] / sum(row["confusion_matrix"][5]) for row in groups[best_fix]) - statistics.mean(row["confusion_matrix"][5][5] / sum(row["confusion_matrix"][5]) for row in groups["none"])
-    close_accuracy = abs(summaries["class-weighted loss"]["test_accuracy"]["mean"] - summaries["weighted sampler"]["test_accuracy"]["mean"])
+    dog_change = statistics.mean(
+        row["confusion_matrix"][5][5] / sum(row["confusion_matrix"][5]) for row in groups[best_fix]
+    ) - statistics.mean(row["confusion_matrix"][5][5] / sum(row["confusion_matrix"][5]) for row in groups["none"])
+    close_accuracy = abs(
+        summaries["class-weighted loss"]["test_accuracy"]["mean"]
+        - summaries["weighted sampler"]["test_accuracy"]["mean"]
+    )
     note = [
         f"Reducing class 3 (cat) to 10% lowers cat recall by {del_cat:.3f} relative to the balanced ResNet-18 seed-42 run.",
         f"{best_fix} recovers the most cat recall among the fixes ({best_recovery:+.3f} versus no fix); overall accuracy changes by {cost:+.3f}, while dog recall shifts by {dog_change:+.3f}.",
@@ -150,13 +180,33 @@ def generate_report(run_root: Path, report_dir: Path, figures_dir: Path, markdow
         f"Weighted-loss and sampler overall accuracy differ by {close_accuracy:.3f}, below their seed standard deviations ({summaries['class-weighted loss']['test_accuracy']['std']:.3f} and {summaries['weighted sampler']['test_accuracy']['std']:.3f}); this ranking is smaller than the seed spread.",
         "Both balanced backbones have a single seed, so they provide references without a variability estimate.",
     ]
-    table = ["| Run | Backbone | Fix | Seed | Accuracy | Macro-F1 | Macro recall | Cat recall | Cat precision |", "|---|---|---|---:|---:|---:|---:|---:|---:|"]
+    table = [
+        "| Run | Backbone | Fix | Seed | Accuracy | Macro-F1 | Macro recall | Cat recall | Cat precision |",
+        "|---|---|---|---:|---:|---:|---:|---:|---:|",
+    ]
     for row in public_rows:
-        table.append(f"| {row['run']} | {row['backbone']} | {row['fix']} | {row['seed']} | {row['test_accuracy']:.4f} | {row['macro_f1']:.4f} | {row['macro_recall']:.4f} | {row['cat_recall']:.4f} | {row['cat_precision']:.4f} |")
+        table.append(
+            f"| {row['run']} | {row['backbone']} | {row['fix']} | {row['seed']} | {row['test_accuracy']:.4f} | {row['macro_f1']:.4f} | {row['macro_recall']:.4f} | {row['cat_recall']:.4f} | {row['cat_precision']:.4f} |"
+        )
     lost = ["| Fix | Missed cat predicted as (mean count per 1,000 cats) |", "|---|---|"]
     for fix, values in cats_missed.items():
-        lost.append(f"| {fix} | " + ", ".join(f"{name} {count / 10:.1f}" for name, count in sorted(values.items(), key=lambda item: -item[1])) + " |")
-    body = "# CIFAR-10 test results\n\n" + "\n".join(note) + "\n\n" + "\n".join(table) + "\n\n" + "\n".join(lost) + "\n\n" + "![Row-normalized confusion: balanced ResNet-50](figures/cifar_balanced_resnet50_confusion.png)\n\n" + "![Row-normalized confusion: no-fix imbalanced ResNet-18](figures/cifar_imbalance_none_confusion.png)\n\n" + "![Cat recall and accuracy by fix](figures/cifar_fix_comparison.png)\n"
+        lost.append(
+            f"| {fix} | "
+            + ", ".join(f"{name} {count / 10:.1f}" for name, count in sorted(values.items(), key=lambda item: -item[1]))
+            + " |"
+        )
+    body = (
+        "# CIFAR-10 test results\n\n"
+        + "\n".join(note)
+        + "\n\n"
+        + "\n".join(table)
+        + "\n\n"
+        + "\n".join(lost)
+        + "\n\n"
+        + "![Row-normalized confusion: balanced ResNet-50](figures/cifar_balanced_resnet50_confusion.png)\n\n"
+        + "![Row-normalized confusion: no-fix imbalanced ResNet-18](figures/cifar_imbalance_none_confusion.png)\n\n"
+        + "![Cat recall and accuracy by fix](figures/cifar_fix_comparison.png)\n"
+    )
     markdown_path.parent.mkdir(parents=True, exist_ok=True)
     markdown_path.write_text(body, encoding="utf-8")
     return public_rows

@@ -39,16 +39,28 @@ def _scores(y_true: list[int], y_pred: list[int], loss: float, classes: list[str
         per_class[name] = {"accuracy": recall, "precision": precision, "recall": recall, "f1": f1}
     macro_f1 = sum(values["f1"] for values in per_class.values()) / len(classes) if classes else 0.0
     macro_recall = sum(values["recall"] for values in per_class.values()) / len(classes) if classes else 0.0
-    return {"accuracy": sum(t == p for t, p in zip(y_true, y_pred)) / len(y_true) if y_true else 0.0,
-            "macro_f1": macro_f1, "macro_recall": macro_recall,
-            "per_class": per_class, "loss": loss, "count": len(y_true)}
+    return {
+        "accuracy": sum(t == p for t, p in zip(y_true, y_pred)) / len(y_true) if y_true else 0.0,
+        "macro_f1": macro_f1,
+        "macro_recall": macro_recall,
+        "per_class": per_class,
+        "loss": loss,
+        "count": len(y_true),
+    }
 
 
 def _plot_confusion(matrix: np.ndarray, classes: list[str], path: Path) -> None:
     fig, ax = plt.subplots(figsize=(5, 4))
     ax.imshow(matrix, cmap="Blues")
-    ax.set(xticks=range(len(classes)), yticks=range(len(classes)), xticklabels=classes,
-           yticklabels=classes, xlabel="Predicted", ylabel="True", title="Validation confusion matrix")
+    ax.set(
+        xticks=range(len(classes)),
+        yticks=range(len(classes)),
+        xticklabels=classes,
+        yticklabels=classes,
+        xlabel="Predicted",
+        ylabel="True",
+        title="Validation confusion matrix",
+    )
     for row in range(len(classes)):
         for col in range(len(classes)):
             ax.text(col, row, str(matrix[row, col]), ha="center", va="center")
@@ -62,19 +74,28 @@ def _open_image(record: dict[str, Any]) -> Image.Image:
         return image.convert("RGB")
 
 
-def _gallery(records: list[dict[str, Any]], kind: str, class_name: str, output: Path,
-             load_image: Callable[[dict[str, Any]], Image.Image] = _open_image) -> None:
+def _gallery(
+    records: list[dict[str, Any]],
+    kind: str,
+    class_name: str,
+    output: Path,
+    load_image: Callable[[dict[str, Any]], Image.Image] = _open_image,
+) -> None:
     """Save up to ``_GALLERY_LIMIT`` example images of ``class_name``: most confident correct/wrong, or least sure."""
     in_class = [r for r in records if r["true_name"] == class_name]
     if kind == "correct":
-        chosen = sorted((r for r in in_class if r["true"] == r["predicted"]),
-                        key=lambda r: r["confidence"], reverse=True)[:_GALLERY_LIMIT]
+        chosen = sorted(
+            (r for r in in_class if r["true"] == r["predicted"]), key=lambda r: r["confidence"], reverse=True
+        )[:_GALLERY_LIMIT]
     elif kind == "wrong":
-        chosen = sorted((r for r in in_class if r["true"] != r["predicted"]),
-                        key=lambda r: r["confidence"], reverse=True)[:_GALLERY_LIMIT]
+        chosen = sorted(
+            (r for r in in_class if r["true"] != r["predicted"]), key=lambda r: r["confidence"], reverse=True
+        )[:_GALLERY_LIMIT]
     else:
         # Binary runs are least sure near p = 0.5; otherwise the lowest top-class confidence.
-        chosen = sorted(in_class, key=lambda r: abs(r["p_dog"] - 0.5) if "p_dog" in r else r["confidence"])[:_GALLERY_LIMIT]
+        chosen = sorted(in_class, key=lambda r: abs(r["p_dog"] - 0.5) if "p_dog" in r else r["confidence"])[
+            :_GALLERY_LIMIT
+        ]
     fig, axes = plt.subplots(1, max(1, len(chosen)), figsize=(3 * max(1, len(chosen)), 3.6), squeeze=False)
     if not chosen:
         axes[0, 0].text(0.5, 0.5, "No matching validation images", ha="center", va="center")
@@ -108,8 +129,9 @@ def evaluate(run: str | Path, results_path: str | Path = "results/latest.json", 
     elif split == "test":
         raise ValueError("--split test is only supported for CIFAR-10")
     else:
-        dataset = ImageFolderDataset(config.data_root, "val", config.data.classes, build_eval_transform(config),
-                                     seed=config.train.seed)
+        dataset = ImageFolderDataset(
+            config.data_root, "val", config.data.classes, build_eval_transform(config), seed=config.train.seed
+        )
     loader = make_dataloader(dataset, config.eval.batch_size, config.eval.num_workers)
     truths: list[int] = []
     predictions: list[int] = []
@@ -132,8 +154,15 @@ def evaluate(run: str | Path, results_path: str | Path = "results/latest.json", 
     records = []
     samples = dataset.samples if hasattr(dataset, "samples") else [("", int(label)) for label in dataset.labels]
     for index, ((path, truth), pred, probs) in enumerate(zip(samples, predictions, probabilities)):
-        record = {"path": str(path), "index": index, "true": truth, "predicted": pred,
-                  "true_name": classes[truth], "predicted_name": classes[pred], "confidence": max(probs)}
+        record = {
+            "path": str(path),
+            "index": index,
+            "true": truth,
+            "predicted": pred,
+            "true_name": classes[truth],
+            "predicted_name": classes[pred],
+            "confidence": max(probs),
+        }
         if binary:
             record["p_dog"] = probs[1]
             record["confidence"] = probs[1] if pred == 1 else 1 - probs[1]
@@ -153,14 +182,28 @@ def evaluate(run: str | Path, results_path: str | Path = "results/latest.json", 
     _plot_confusion(matrix, classes, confusion_path)
     if split == "val" and hasattr(dataset, "samples"):
         # CIFAR "paths" are identities, not files; read pixels from the dataset instead.
-        load_image = ((lambda record: Image.fromarray(dataset.images[record["index"]], mode="RGB"))
-                      if isinstance(dataset, CIFAR10Dataset) else _open_image)
+        load_image = (
+            (lambda record: Image.fromarray(dataset.images[record["index"]], mode="RGB"))
+            if isinstance(dataset, CIFAR10Dataset)
+            else _open_image
+        )
         for name in classes:
             for kind in ("correct", "wrong", "uncertain"):
                 _gallery(records, kind, name, run_dir / f"gallery_{kind}_{name}.png", load_image)
     result_path = Path(results_path)
     result_path.parent.mkdir(parents=True, exist_ok=True)
-    result_path.write_text(json.dumps({"metric": "accuracy", "value": metrics["accuracy"],
-                                       "seed": config.train.seed, "split": split, "notes": run_dir.name},
-                                      indent=2) + "\n", encoding="utf-8")
+    result_path.write_text(
+        json.dumps(
+            {
+                "metric": "accuracy",
+                "value": metrics["accuracy"],
+                "seed": config.train.seed,
+                "split": split,
+                "notes": run_dir.name,
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     return metrics

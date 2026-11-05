@@ -16,13 +16,13 @@ METRIC_COLUMNS = ("train_loss", "train_acc", "val_loss", "val_acc")
 def _metrics(run_dir: Path) -> dict[int, dict[str, float]]:
     with (run_dir / "metrics.csv").open(newline="", encoding="utf-8") as stream:
         return {
-            int(row["epoch"]): {name: float(row[name]) for name in METRIC_COLUMNS}
-            for row in csv.DictReader(stream)
+            int(row["epoch"]): {name: float(row[name]) for name in METRIC_COLUMNS} for row in csv.DictReader(stream)
         }
 
 
-def check_repeatable(config_path: str | Path, epochs: int, output: str | Path,
-                     overrides: list[str] | None = None, tolerance: float = 0.0) -> tuple[float, float]:
+def check_repeatable(
+    config_path: str | Path, epochs: int, output: str | Path, overrides: list[str] | None = None, tolerance: float = 0.0
+) -> tuple[float, float]:
     """Train twice at the configured seed and once at a different seed."""
     if epochs < 1:
         raise ValueError("epochs must be at least 1")
@@ -39,12 +39,12 @@ def check_repeatable(config_path: str | Path, epochs: int, output: str | Path,
     if len(common_epochs) != epochs or set(runs[0]) != set(runs[1]):
         raise RuntimeError("same-seed runs produced different epoch counts")
     largest_same = max(
-        abs(runs[0][epoch][metric] - runs[1][epoch][metric])
-        for epoch in common_epochs for metric in METRIC_COLUMNS
+        abs(runs[0][epoch][metric] - runs[1][epoch][metric]) for epoch in common_epochs for metric in METRIC_COLUMNS
     )
     different_seed = max(
         abs(runs[0][epoch][metric] - runs[2][epoch][metric])
-        for epoch in set(runs[0]) & set(runs[2]) for metric in METRIC_COLUMNS
+        for epoch in set(runs[0]) & set(runs[2])
+        for metric in METRIC_COLUMNS
     )
     print(f"largest_same_seed_metric_difference={largest_same:.12g}")
     print(f"largest_different_seed_metric_difference={different_seed:.12g}")

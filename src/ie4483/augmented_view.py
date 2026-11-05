@@ -22,8 +22,9 @@ CROP_RATIO = (3 / 4, 4 / 3)
 JITTER_RANGE = (0.8, 1.2)
 
 
-def _adjust(image: Image.Image, adjustment: str, rng: random.Random,
-            output_size: tuple[int, int] = OUTPUT_SIZE) -> tuple[Image.Image, str]:
+def _adjust(
+    image: Image.Image, adjustment: str, rng: random.Random, output_size: tuple[int, int] = OUTPUT_SIZE
+) -> tuple[Image.Image, str]:
     if adjustment == "horizontal_flip":
         return image.transpose(Image.Transpose.FLIP_LEFT_RIGHT), "horizontal"
     if adjustment == "rotation":
@@ -37,8 +38,13 @@ def _adjust(image: Image.Image, adjustment: str, rng: random.Random,
         crop_height = min(height, max(1, round((width * height * scale / ratio) ** 0.5)))
         left = rng.randint(0, width - crop_width)
         top = rng.randint(0, height - crop_height)
-        result = image.crop((left, top, left + crop_width, top + crop_height)).resize(output_size, Image.Resampling.BILINEAR)
-        return result, f"scale={scale:.8f};ratio={ratio:.8f};left={left};top={top};width={crop_width};height={crop_height}"
+        result = image.crop((left, top, left + crop_width, top + crop_height)).resize(
+            output_size, Image.Resampling.BILINEAR
+        )
+        return (
+            result,
+            f"scale={scale:.8f};ratio={ratio:.8f};left={left};top={top};width={crop_width};height={crop_height}",
+        )
     if adjustment == "colour_jitter":
         factors = [rng.uniform(*JITTER_RANGE) for _ in range(3)]
         result = image
@@ -48,8 +54,15 @@ def _adjust(image: Image.Image, adjustment: str, rng: random.Random,
     raise ValueError(f"unknown adjustment: {adjustment}")
 
 
-def make_augmented_view(input_dir: str | Path, output_dir: str | Path, mode: str, seed: int = 0, *,
-                        classes: tuple[str, ...] = CLASSES, output_size: tuple[int, int] = OUTPUT_SIZE) -> dict[str, int]:
+def make_augmented_view(
+    input_dir: str | Path,
+    output_dir: str | Path,
+    mode: str,
+    seed: int = 0,
+    *,
+    classes: tuple[str, ...] = CLASSES,
+    output_size: tuple[int, int] = OUTPUT_SIZE,
+) -> dict[str, int]:
     """Materialize one seeded adjustment per training image and copy held-out data."""
     source, destination = Path(input_dir), Path(output_dir)
     if mode not in {"augmented", "mixed"}:

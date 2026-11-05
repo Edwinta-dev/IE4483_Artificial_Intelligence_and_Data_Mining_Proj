@@ -75,11 +75,13 @@ def probe(
     results: list[dict[str, Any]] = []
     for architecture in ARCHITECTURES:
         for freeze_mode in MODES:
-            model = build_model({
-                "architecture": architecture,
-                "pretrained": False,
-                "freeze_mode": freeze_mode,
-            }).to("cuda")
+            model = build_model(
+                {
+                    "architecture": architecture,
+                    "pretrained": False,
+                    "freeze_mode": freeze_mode,
+                }
+            ).to("cuda")
             parameters = [parameter for parameter in model.parameters() if parameter.requires_grad]
             optimizer = torch.optim.AdamW(parameters)
             peaks: dict[int, int] = {}
@@ -90,15 +92,17 @@ def probe(
 
             safe = find_max_batch(step, start, limit, safety_margin)
             largest = max((size for size in peaks), default=0)
-            results.append({
-                "architecture": architecture,
-                "freeze_mode": freeze_mode,
-                "image_size": image_size,
-                "largest_working_batch_size": largest,
-                "safe_batch_size": safe,
-                "peak_memory_bytes": peaks.get(largest),
-                "gradient_accumulation_steps": accumulation_steps(safe),
-            })
+            results.append(
+                {
+                    "architecture": architecture,
+                    "freeze_mode": freeze_mode,
+                    "image_size": image_size,
+                    "largest_working_batch_size": largest,
+                    "safe_batch_size": safe,
+                    "peak_memory_bytes": peaks.get(largest),
+                    "gradient_accumulation_steps": accumulation_steps(safe),
+                }
+            )
             del optimizer, model
             torch.cuda.empty_cache()
     return results

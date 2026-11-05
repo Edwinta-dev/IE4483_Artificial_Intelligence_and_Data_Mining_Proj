@@ -35,13 +35,17 @@ def _data_size(cfg: Config | Mapping[str, Any]) -> int:
 
 
 def _normalize_step() -> _Step:
-    return _Step(f"ToTensor() -> Normalize(mean={IMAGENET_MEAN}, std={IMAGENET_STD})",
-                 lambda: transforms.Compose([transforms.ToTensor(), transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD)]))
+    return _Step(
+        f"ToTensor() -> Normalize(mean={IMAGENET_MEAN}, std={IMAGENET_STD})",
+        lambda: transforms.Compose([transforms.ToTensor(), transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD)]),
+    )
 
 
 def _eval_steps(size: int) -> list[_Step]:
-    return [_Step(f"Resize(shorter_side={size})", lambda: transforms.Resize(size)),
-            _Step(f"CenterCrop(size={size})", lambda: transforms.CenterCrop(size))]
+    return [
+        _Step(f"Resize(shorter_side={size})", lambda: transforms.Resize(size)),
+        _Step(f"CenterCrop(size={size})", lambda: transforms.CenterCrop(size)),
+    ]
 
 
 def _train_steps(cfg: Config | Mapping[str, Any]) -> list[_Step]:
@@ -54,8 +58,12 @@ def _train_steps(cfg: Config | Mapping[str, Any]) -> list[_Step]:
     steps: list[_Step] = []
     if value("random_resized_crop", False):
         scale = tuple(value("random_resized_crop_scale", [0.8, 1.0]))
-        steps.append(_Step(f"RandomResizedCrop(size={size}, scale={scale})",
-                           lambda: transforms.RandomResizedCrop(size, scale=scale)))
+        steps.append(
+            _Step(
+                f"RandomResizedCrop(size={size}, scale={scale})",
+                lambda: transforms.RandomResizedCrop(size, scale=scale),
+            )
+        )
     else:
         steps.extend(_eval_steps(size))
     if value("horizontal_flip", False):
@@ -64,11 +72,16 @@ def _train_steps(cfg: Config | Mapping[str, Any]) -> list[_Step]:
     if degrees:
         steps.append(_Step(f"RandomRotation(degrees={degrees})", lambda: transforms.RandomRotation(float(degrees))))
     if value("color_jitter", False):
-        jitter = {name: value(f"color_jitter_{name}", default)
-                  for name, default in (("brightness", 0.2), ("contrast", 0.2), ("saturation", 0.2), ("hue", 0.0))}
-        steps.append(_Step(
-            "ColorJitter(" + ", ".join(f"{name}={amount}" for name, amount in jitter.items()) + ")",
-            lambda: transforms.ColorJitter(**{name: float(amount) for name, amount in jitter.items()})))
+        jitter = {
+            name: value(f"color_jitter_{name}", default)
+            for name, default in (("brightness", 0.2), ("contrast", 0.2), ("saturation", 0.2), ("hue", 0.0))
+        }
+        steps.append(
+            _Step(
+                "ColorJitter(" + ", ".join(f"{name}={amount}" for name, amount in jitter.items()) + ")",
+                lambda: transforms.ColorJitter(**{name: float(amount) for name, amount in jitter.items()}),
+            )
+        )
     return steps
 
 

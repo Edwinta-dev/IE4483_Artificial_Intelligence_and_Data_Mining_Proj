@@ -25,6 +25,7 @@ def get_setting(source: Any, *path: str, default: Any = None) -> Any:
             return default
     return source
 
+
 FREEZE_MODES = ("frozen", "last_block", "full")
 # Fields restricted to a fixed set of (lower-case) values: (section, field) -> allowed values.
 CHOICES = {

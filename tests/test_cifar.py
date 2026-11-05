@@ -45,7 +45,9 @@ def test_cifar_one_epoch_cpu_and_test_evaluation(tmp_path, monkeypatch):
         "  classes: [airplane, automobile, bird, cat, deer, dog, frog, horse, ship, truck]\n"
         "model:\n  architecture: resnet18\n  pretrained: false\n  freeze_backbone: true\n  num_classes: 10\n"
         "train:\n  seed: 7\n  epochs: 1\n  batch_size: 10\n  mixed_precision: false\n"
-        "eval:\n  batch_size: 10\n", encoding="utf-8")
+        "eval:\n  batch_size: 10\n",
+        encoding="utf-8",
+    )
     config = load_config(config_path)
     config.train.feature_cache = "off"
     run = train(config, tmp_path / "runs")
@@ -69,7 +71,9 @@ def _cifar_config(tmp_path):
         "  classes: [airplane, automobile, bird, cat, deer, dog, frog, horse, ship, truck]\n"
         "model:\n  architecture: resnet18\n  pretrained: false\n  freeze_backbone: true\n  num_classes: 10\n"
         "train:\n  seed: 7\n  epochs: 1\n  batch_size: 10\n  mixed_precision: false\n"
-        "eval:\n  batch_size: 10\n", encoding="utf-8")
+        "eval:\n  batch_size: 10\n",
+        encoding="utf-8",
+    )
     return load_config(config_path)
 
 
