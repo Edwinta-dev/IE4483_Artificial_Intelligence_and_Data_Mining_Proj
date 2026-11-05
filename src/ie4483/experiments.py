@@ -42,53 +42,56 @@ def _group_value(value: Any) -> Any:
     return value
 
 
+def _mean_std(values: list[float]) -> tuple[float, float]:
+    return mean(values), (stdev(values) if len(values) > 1 else 0.0)
+
+
+def _group_rows(rows: list[dict[str, Any]], dimensions: list[str]) -> dict[tuple[Any, ...], list[dict[str, Any]]]:
+    """Rows grouped by their (hashable) values for ``dimensions``, in first-seen order."""
+    grouped: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
+    for row in rows:
+        grouped.setdefault(tuple(_group_value(row.get(key)) for key in dimensions), []).append(row)
+    return grouped
+
+
 def _write_summary(rows: list[dict[str, Any]], output: Path, dimensions: list[str] | None = None) -> None:
+    """Write ``summary.csv`` and ``summary.md``: one line per seed, or one per parameter cell when swept."""
     output.mkdir(parents=True, exist_ok=True)
-    fields = (dimensions or []) + ["seed", "run", "val_accuracy"]
-    csv_rows = rows
+    dimensions = dimensions or []
+    grouped = _group_rows(rows, dimensions)
     if dimensions:
-        grouped: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
-        for row in rows:
-            grouped.setdefault(tuple(_group_value(row[key]) for key in dimensions), []).append(row)
         seed_ids = sorted({row["seed"] for row in rows})
         fields = dimensions + ["seed_count", "mean", "std"] + [f"seed_{seed}_accuracy" for seed in seed_ids]
         csv_rows = []
+        lines = ["# Experiment summary", "",
+                 "| " + " | ".join([*dimensions, "Seeds", "Mean validation accuracy ± std"]) + " |",
+                 "|" + "|".join(["---"] * (len(dimensions) + 2)) + "|"]
         for key, entries in grouped.items():
             values = [float(entry["val_accuracy"]) for entry in entries]
+            average, spread = _mean_std(values)
             csv_rows.append({
                 **dict(zip(dimensions, key)),
                 "seed_count": len(values),
-                "mean": mean(values),
-                "std": stdev(values) if len(values) > 1 else 0.0,
+                "mean": average,
+                "std": spread,
                 **{f"seed_{entry['seed']}_accuracy": entry["val_accuracy"] for entry in entries},
             })
-    elif rows:
+            lines.append("| " + " | ".join(map(str, [*key, len(values), f"{average:.6f} ± {spread:.6f}"])) + " |")
+    else:
+        fields = ["seed", "run", "val_accuracy"]
         values = [float(row["val_accuracy"]) for row in rows]
-        spread = stdev(values) if len(values) > 1 else 0.0
-        fields += ["mean", "std"]
-        csv_rows = [{**row, "mean": mean(values), "std": spread} for row in rows]
+        csv_rows = rows
+        lines = ["# Experiment summary", "", "| Seed | Validation accuracy | Run |", "|---:|---:|---|"]
+        lines.extend(f"| {row['seed']} | {float(row['val_accuracy']):.6f} | {row['run']} |" for row in rows)
+        if rows:
+            average, spread = _mean_std(values)
+            fields += ["mean", "std"]
+            csv_rows = [{**row, "mean": average, "std": spread} for row in rows]
+            lines.extend(["", f"Mean: {average:.6f}; standard deviation: {spread:.6f}"])
     with (output / "summary.csv").open("w", newline="", encoding="utf-8") as stream:
         writer = csv.DictWriter(stream, fieldnames=fields)
         writer.writeheader()
         writer.writerows(csv_rows)
-    grouped: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
-    for row in rows:
-        grouped.setdefault(tuple(_group_value(row.get(key)) for key in (dimensions or [])), []).append(row)
-    lines = ["# Experiment summary", ""]
-    if dimensions:
-        lines.append("| " + " | ".join([*dimensions, "Seeds", "Mean validation accuracy ± std"]) + " |")
-        lines.append("|" + "|".join(["---"] * (len(dimensions) + 2)) + "|")
-        for key, entries in grouped.items():
-            values = [float(item["val_accuracy"]) for item in entries]
-            spread = stdev(values) if len(values) > 1 else 0.0
-            lines.append("| " + " | ".join(map(str, [*key, len(values), f"{mean(values):.6f} ± {spread:.6f}"])) + " |")
-    else:
-        lines.extend(["| Seed | Validation accuracy | Run |", "|---:|---:|---|"])
-        for row in rows:
-            lines.append(f"| {row['seed']} | {float(row['val_accuracy']):.6f} | {row['run']} |")
-        values = [float(row["val_accuracy"]) for row in rows]
-        spread = stdev(values) if len(values) > 1 else 0.0
-        lines.extend(["", f"Mean: {mean(values):.6f}; standard deviation: {spread:.6f}"])
     (output / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -119,6 +122,11 @@ def _partial_run(seed_dir: Path) -> Path | None:
     return runs[-1] if runs else None
 
 
+def default_sweep_output(sweep_path: str | Path) -> Path:
+    """Where a sweep writes its runs when no output folder is given."""
+    return Path("runs") / "sweeps" / Path(sweep_path).stem
+
+
 def _resolve_config(spec_path: Path, configured: str | Path) -> Path:
     """Resolve a sweep's ``config`` value: as given (cwd-relative), else relative to the sweep's repo root."""
     candidate = Path(configured)
@@ -147,7 +155,7 @@ def sweep(sweep_path: str | Path, output: str | Path | None = None) -> list[dict
         raise ValueError("sweep overrides must be a list of KEY=VALUE strings")
     dimensions = list(parameters)
     combinations = list(itertools.product(*(parameters[key] for key in dimensions)))
-    output = Path(output or Path("runs") / "sweeps" / spec_path.stem)
+    output = Path(output) if output else default_sweep_output(spec_path)
     rows: list[dict[str, Any]] = []
     for values in combinations:
         cell = dict(zip(dimensions, values))
@@ -165,26 +173,16 @@ def sweep(sweep_path: str | Path, output: str | Path | None = None) -> list[dict
                                              _partial_run(seed_dir))
             rows.append({**cell, "seed": seed, "run": str(run_dir), "val_accuracy": accuracy})
         _write_summary(rows, output, dimensions)
-    # Sort cells by average validation accuracy; ties retain their declared grid order.
-    def cell_key(values):
-        return tuple(_group_value(value) for value in values)
-
-    def row_key(row):
-        return cell_key(row[d] for d in dimensions)
-
-    cell_scores = {}
-    for values in combinations:
-        selected = [float(row["val_accuracy"]) for row in rows if row_key(row) == cell_key(values)]
-        cell_scores[cell_key(values)] = mean(selected)
-    ordered = sorted(combinations, key=lambda values: cell_scores[cell_key(values)], reverse=True)
-    ordered_rows = [row for values in ordered for row in rows if row_key(row) == cell_key(values)]
+    # Order cells by mean validation accuracy; ties keep their declared grid order.
+    by_cell = _group_rows(rows, dimensions)
+    cells = sorted(by_cell, key=lambda cell: _mean_std([float(row["val_accuracy"]) for row in by_cell[cell]])[0],
+                   reverse=True)
+    ordered_rows = [row for cell in cells for row in by_cell[cell]]
     _write_summary(ordered_rows, output, dimensions)
-    means = [cell_scores[cell_key(values)] for values in ordered]
-    errors = []
-    for values in ordered:
-        scores = [float(row["val_accuracy"]) for row in rows if row_key(row) == cell_key(values)]
-        errors.append(stdev(scores) if len(scores) > 1 else 0.0)
-    labels = [", ".join(f"{key}={value}" for key, value in zip(dimensions, values)) for values in ordered]
+    stats = [_mean_std([float(row["val_accuracy"]) for row in by_cell[cell]]) for cell in cells]
+    means, errors = [average for average, _ in stats], [spread for _, spread in stats]
+    raw_values = {tuple(_group_value(value) for value in values): values for values in combinations}
+    labels = [", ".join(f"{key}={value}" for key, value in zip(dimensions, raw_values[cell])) for cell in cells]
     fig, ax = plt.subplots(figsize=(max(6, len(labels) * 1.1), 4))
     ax.bar(range(len(labels)), means, yerr=errors, capsize=4)
     ax.set(xticks=range(len(labels)), xticklabels=labels, ylabel="Validation accuracy", xlabel="Parameters")

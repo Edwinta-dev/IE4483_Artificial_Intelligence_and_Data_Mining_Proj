@@ -161,3 +161,10 @@ def test_sweep_config_resolves_relative_to_repo_root_and_errors_when_missing(tmp
     assert _resolve_config(spec, "configs/base.yaml") == tmp_path / "configs" / "base.yaml"
     with pytest.raises(FileNotFoundError, match="sweep config not found"):
         _resolve_config(spec, "configs/missing.yaml")
+
+
+def test_default_sweep_output_uses_spec_name_on_any_platform():
+    from ie4483.experiments import default_sweep_output
+
+    assert default_sweep_output("configs\\sweeps\\gpu_baseline.yaml".replace("\\", "/")) == Path("runs/sweeps/gpu_baseline")
+    assert default_sweep_output(Path("configs/sweeps/x.yaml")) == Path("runs/sweeps/x")

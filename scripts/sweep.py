@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from statistics import mean
 
-from ie4483.experiments import sweep
+from ie4483.experiments import default_sweep_output, sweep
 
 
 def write_report(rows: list[dict], report_path: Path) -> list[dict]:
@@ -66,7 +66,7 @@ def main() -> None:
     rows = sweep(args.sweep, args.output)
     if args.report:
         write_report(rows, args.report)
-    print(f"Completed {len(rows)} seed runs; summary: {args.output or 'runs/sweeps/' + args.sweep.rsplit('/', 1)[-1].removesuffix('.yaml')}")
+    print(f"Completed {len(rows)} seed runs; summary: {args.output or default_sweep_output(args.sweep)}")
 
 
 if __name__ == "__main__":
