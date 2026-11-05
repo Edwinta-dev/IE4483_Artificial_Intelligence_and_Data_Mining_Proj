@@ -10,6 +10,8 @@ import torch
 from torch import nn
 from torchvision.models import ResNet18_Weights, ResNet50_Weights, resnet18, resnet50
 
+from ie4483.config import resolve_freeze_mode
+
 _BACKBONES = {
     "resnet18": (resnet18, ResNet18_Weights.DEFAULT, 512),
     "resnet50": (resnet50, ResNet50_Weights.DEFAULT, 2048),
@@ -34,7 +36,8 @@ class _ResNetWithHead(nn.Module):
         self.head = head
         self.freeze_mode = freeze_mode
 
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+    def forward_features(self, inputs: torch.Tensor) -> torch.Tensor:
+        """Pooled backbone features, shape ``(batch, feature_dim)``."""
         features = self.backbone.conv1(inputs)
         features = self.backbone.bn1(features)
         features = self.backbone.relu(features)
@@ -43,8 +46,10 @@ class _ResNetWithHead(nn.Module):
         features = self.backbone.layer2(features)
         features = self.backbone.layer3(features)
         features = self.backbone.layer4(features)
-        features = self.backbone.avgpool(features)
-        return self.head(torch.flatten(features, 1))
+        return torch.flatten(self.backbone.avgpool(features), 1)
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        return self.head(self.forward_features(inputs))
 
     def train(self, mode: bool = True) -> _ResNetWithHead:
         super().train(mode)
@@ -103,11 +108,7 @@ def build_model(cfg: Any) -> nn.Module:
     layers.append(nn.Linear(input_dim, num_classes))
     backbone.fc = nn.Identity()
 
-    freeze_mode = _get(config, "freeze_mode", None)
-    if freeze_mode is None:
-        freeze_mode = "frozen" if _get(config, "freeze_backbone", True) else "full"
-    if freeze_mode not in {"frozen", "last_block", "full"}:
-        raise ValueError("freeze_mode must be 'frozen', 'last_block', or 'full'")
+    freeze_mode = resolve_freeze_mode(_get(config, "freeze_mode", None), _get(config, "freeze_backbone", True))
     model = _ResNetWithHead(backbone, feature_dim, nn.Sequential(*layers), freeze_mode)
     if freeze_mode == "frozen":
         for parameter in model.backbone.parameters():

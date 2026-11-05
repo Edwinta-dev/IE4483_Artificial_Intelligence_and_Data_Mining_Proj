@@ -24,6 +24,14 @@ CHOICES = {
 }
 
 
+def resolve_freeze_mode(freeze_mode: str | None, freeze_backbone: bool = True) -> str:
+    """The effective freeze mode: ``freeze_mode`` wins; the legacy ``freeze_backbone`` flag is the fallback."""
+    mode = freeze_mode if freeze_mode is not None else ("frozen" if freeze_backbone else "full")
+    if mode not in FREEZE_MODES:
+        raise ValueError(f"freeze_mode must be one of {', '.join(FREEZE_MODES)}")
+    return mode
+
+
 @dataclasses.dataclass
 class DataConfig:
     root: str | None = None
@@ -37,10 +45,13 @@ class DataConfig:
 class ModelConfig:
     architecture: str = "resnet18"
     pretrained: bool = True
+    # Legacy flag: True means "frozen", False means "full". Superseded by freeze_mode.
     freeze_backbone: bool = True
     # Overrides freeze_backbone when set: "frozen", "last_block", or "full".
     freeze_mode: str | None = None
     num_classes: int = 2
+    dropout: float = 0.0
+    hidden_dim: int | None = None
 
 
 @dataclasses.dataclass

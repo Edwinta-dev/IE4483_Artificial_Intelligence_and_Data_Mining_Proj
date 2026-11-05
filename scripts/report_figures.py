@@ -11,7 +11,7 @@ from typing import Any
 import yaml
 
 from ie4483 import figures, proxy
-from ie4483.config import load_config
+from ie4483.config import load_config, resolve_freeze_mode
 
 FIELDS = ("run", "backbone", "freeze_mode", "learning_rate", "augmentation", "epochs_run",
           "best_val_accuracy", "time_per_epoch", "proxy")
@@ -26,9 +26,7 @@ def _summarize_run(run_dir: Path) -> dict[str, Any]:
     typed_config = load_config(run_dir / "config.yaml")
     model = config_values.get("model", {})
     training_values = config_values.get("train", {})
-    freeze_mode = model.get("freeze_mode")
-    if freeze_mode is None:
-        freeze_mode = "frozen" if model.get("freeze_backbone", True) else "full"
+    freeze_mode = resolve_freeze_mode(model.get("freeze_mode"), model.get("freeze_backbone", True))
     best_index = max(range(len(metrics)), key=lambda index: float(metrics[index]["val_acc"]))
     best = metrics[best_index]
     is_proxy = proxy.is_proxy_dataset(typed_config.data_root)

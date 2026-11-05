@@ -3,8 +3,8 @@ import pickle
 import numpy as np
 
 from ie4483.cifar import CIFAR10_CLASSES, CIFAR10Dataset
-from ie4483.evaluate import evaluate
 from ie4483.config import load_config
+from ie4483.evaluate import evaluate
 from ie4483.train import train
 
 

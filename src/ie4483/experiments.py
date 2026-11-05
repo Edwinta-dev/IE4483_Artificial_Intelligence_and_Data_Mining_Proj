@@ -17,8 +17,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import yaml
 
-from ie4483.evaluate import evaluate
 from ie4483.config import load_config
+from ie4483.evaluate import evaluate
 from ie4483.train import train
 
 

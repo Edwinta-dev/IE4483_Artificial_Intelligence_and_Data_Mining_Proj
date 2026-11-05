@@ -34,17 +34,7 @@ def extract_features(model: torch.nn.Module, loader: DataLoader, device: torch.d
     with torch.inference_mode():
         for images, target in loader:
             images = images.to(device)
-            backbone = getattr(model, "backbone", None)
-            if backbone is not None:
-                output = backbone.conv1(images)
-                output = backbone.bn1(output)
-                output = backbone.relu(output)
-                output = backbone.maxpool(output)
-                for layer in (backbone.layer1, backbone.layer2, backbone.layer3, backbone.layer4):
-                    output = layer(output)
-                output = torch.flatten(backbone.avgpool(output), 1)
-            else:
-                output = model(images)
+            output = model.forward_features(images) if hasattr(model, "forward_features") else model(images)
             features.append(output.detach().cpu())
             labels.append(torch.as_tensor(target).cpu())
     width = getattr(model, "feature_dim", 0)

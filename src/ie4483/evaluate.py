@@ -16,8 +16,8 @@ import numpy as np
 import torch
 from PIL import Image
 
-from ie4483.config import load_config
 from ie4483.cifar import CIFAR10Dataset, cifar_transform
+from ie4483.config import load_config
 from ie4483.data import ImageFolderDataset, make_dataloader
 from ie4483.model import build_model
 from ie4483.proxy import proxy_metric

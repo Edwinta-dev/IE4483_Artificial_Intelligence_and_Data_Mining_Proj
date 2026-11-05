@@ -5,10 +5,10 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from ie4483.config import load_config
 from ie4483.figures import model_architecture_figure, write_model_card
 from ie4483.model import build_model
 from ie4483.seed import seed_everything
-from ie4483.config import load_config
 
 
 def main() -> None:
