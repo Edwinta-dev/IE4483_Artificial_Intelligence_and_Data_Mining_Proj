@@ -30,7 +30,9 @@ def test_evaluate_writes_validation_artifacts_and_result_contract(tmp_path, monk
         encoding="utf-8",
     )
     config = load_config(config_file)
-    run = train(config, {"feature_cache": "off", "patience": 2}, tmp_path / "runs")
+    config.train.feature_cache = "off"
+    config.train.patience = 2
+    run = train(config, tmp_path / "runs")
     results = tmp_path / "results" / "latest.json"
     metrics = evaluate(run, results)
 

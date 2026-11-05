@@ -6,7 +6,8 @@ import argparse
 import csv
 from pathlib import Path
 
-from ie4483.train import load_training_config, train
+from ie4483.config import load_config
+from ie4483.train import train
 
 METRIC_COLUMNS = ("train_loss", "train_acc", "val_loss", "val_acc")
 
@@ -26,14 +27,14 @@ def check_repeatable(config_path: str | Path, epochs: int, output: str | Path,
         raise ValueError("epochs must be at least 1")
     if tolerance < 0:
         raise ValueError("tolerance must be non-negative")
-    config, extra = load_training_config(config_path, overrides)
+    config = load_config(config_path, overrides)
     config.train.epochs = epochs
     root = Path(output)
     seed = config.train.seed
     runs = []
     for index, run_seed in enumerate((seed, seed, seed + 1)):
         config.train.seed = run_seed
-        runs.append(_metrics(train(config, extra, root / f"run-{index}")))
+        runs.append(_metrics(train(config, root / f"run-{index}")))
     common_epochs = set(runs[0]) & set(runs[1])
     if len(common_epochs) != epochs or set(runs[0]) != set(runs[1]):
         raise RuntimeError("same-seed runs produced different epoch counts")

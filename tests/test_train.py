@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import csv
-from types import SimpleNamespace
 
 import pytest
 import torch
 from PIL import Image
 
-from ie4483.config import load_config
+from ie4483.config import Config, EvalConfig, TrainConfig, load_config
 from ie4483.features import extract_features, feature_cache_key, load_or_create_cache
 from ie4483.model import build_model
 from ie4483.train import train
@@ -36,7 +35,7 @@ def test_two_epoch_training_writes_artifacts_and_is_seeded(tmp_path, monkeypatch
         encoding="utf-8",
     )
     config = load_config(config_file)
-    extra = {"patience": 0, "feature_cache": "auto"}
+    config.train.patience = 0
     extraction_calls = 0
     original_extract = training.extract_features
 
@@ -46,8 +45,8 @@ def test_two_epoch_training_writes_artifacts_and_is_seeded(tmp_path, monkeypatch
         return original_extract(*args, **kwargs)
 
     monkeypatch.setattr(training, "extract_features", counted_extract)
-    run_a = train(config, extra, tmp_path / "runs")
-    run_b = train(config, extra, tmp_path / "runs")
+    run_a = train(config, tmp_path / "runs")
+    run_b = train(config, tmp_path / "runs")
     assert extraction_calls == 2
     for run in (run_a, run_b):
         assert {"config.yaml", "transforms.txt", "manifest.csv", "metrics.csv", "best.pt"} <= {
@@ -115,16 +114,12 @@ def test_patience_zero_stops_on_first_validation_loss_regression(tmp_path, monke
         return (0.5 if calls == 2 else 0.6), 0.5
 
     monkeypatch.setattr(training, "_epoch", epoch)
-    cfg = SimpleNamespace(
-        train=SimpleNamespace(batch_size=2, learning_rate=0.01, gradient_accumulation_steps=1,
-                              mixed_precision=False, epochs=4),
-        eval=SimpleNamespace(batch_size=2),
-    )
+    cfg = Config(train=TrainConfig(batch_size=2, learning_rate=0.01, mixed_precision=False, epochs=4,
+                                   optimizer="adamw", weight_decay=0.0, scheduler="none", patience=0),
+                 eval=EvalConfig(batch_size=2))
     data = (torch.ones(2, 2), torch.tensor([0, 1]))
     training._fit(Tiny(), torch.utils.data.DataLoader(torch.utils.data.TensorDataset(*data), batch_size=2),
                   torch.utils.data.DataLoader(torch.utils.data.TensorDataset(*data), batch_size=2), cfg,
-                  {"optimizer": "adamw", "weight_decay": 0.0, "scheduler": "none", "patience": 0,
-                   "class_weights": None, "label_smoothing": 0.0, "warmup_epochs": 0},
                   tmp_path, torch.device("cpu"))
     rows = list(csv.DictReader((tmp_path / "metrics.csv").open(encoding="utf-8")))
     assert len(rows) == 2
@@ -142,16 +137,13 @@ def test_cosine_schedule_reaches_minimum_after_final_warmup_adjusted_epoch(tmp_p
             return self.head(x)
 
     monkeypatch.setattr(training, "_epoch", lambda *args, **kwargs: (1.0, 0.5))
-    cfg = SimpleNamespace(
-        train=SimpleNamespace(batch_size=2, learning_rate=0.1, gradient_accumulation_steps=1,
-                              mixed_precision=False, epochs=4),
-        eval=SimpleNamespace(batch_size=2),
-    )
+    cfg = Config(train=TrainConfig(batch_size=2, learning_rate=0.1, mixed_precision=False, epochs=4,
+                                   optimizer="adamw", weight_decay=0.0, scheduler="cosine", patience=10,
+                                   warmup_epochs=1),
+                 eval=EvalConfig(batch_size=2))
     data = (torch.ones(2, 2), torch.tensor([0, 1]))
     training._fit(Tiny(), torch.utils.data.DataLoader(torch.utils.data.TensorDataset(*data), batch_size=2),
                   torch.utils.data.DataLoader(torch.utils.data.TensorDataset(*data), batch_size=2), cfg,
-                  {"optimizer": "adamw", "weight_decay": 0.0, "scheduler": "cosine", "patience": 10,
-                   "class_weights": None, "label_smoothing": 0.0, "warmup_epochs": 1},
                   tmp_path, torch.device("cpu"))
     checkpoint = torch.load(tmp_path / "last.pt", map_location="cpu", weights_only=False)
     assert checkpoint["scheduler"]["T_max"] == 3
@@ -171,8 +163,11 @@ def test_weighted_sampler_and_class_weights_work_on_image_folders(tmp_path, monk
         "eval:\n  batch_size: 2\n",
         encoding="utf-8",
     )
-    extra = {"feature_cache": "off", "weighted_sampler": True, "class_weighted": True}
-    run = train(load_config(config_file), extra, tmp_path / "runs")
+    config = load_config(config_file)
+    config.train.feature_cache = "off"
+    config.train.weighted_sampler = True
+    config.train.class_weighted = True
+    run = train(config, tmp_path / "runs")
     assert (run / "best.pt").is_file()
 
 
@@ -191,8 +186,9 @@ def test_interrupted_training_resumes_with_matching_weights_and_metrics(tmp_path
         encoding="utf-8",
     )
     config = load_config(config_file)
-    extra = {"feature_cache": "off", "patience": 10}
-    straight = train(config, extra, tmp_path / "straight")
+    config.train.feature_cache = "off"
+    config.train.patience = 10
+    straight = train(config, tmp_path / "straight")
 
     original_save = training._atomic_save
     last_saves = 0
@@ -207,14 +203,14 @@ def test_interrupted_training_resumes_with_matching_weights_and_metrics(tmp_path
 
     monkeypatch.setattr(training, "_atomic_save", stop_after_epoch_one)
     try:
-        train(config, extra, tmp_path / "interrupted")
+        train(config, tmp_path / "interrupted")
     except RuntimeError as error:
         assert str(error) == "simulated interruption"
     else:
         raise AssertionError("training did not stop at the simulated interruption")
     partial = next((tmp_path / "interrupted").iterdir())
     monkeypatch.setattr(training, "_atomic_save", original_save)
-    resumed = train(config, extra, tmp_path / "interrupted", resume=partial)
+    resumed = train(config, tmp_path / "interrupted", resume=partial)
 
     straight_rows = list(csv.DictReader((straight / "metrics.csv").open(encoding="utf-8")))
     resumed_rows = list(csv.DictReader((resumed / "metrics.csv").open(encoding="utf-8")))
@@ -226,9 +222,11 @@ def test_interrupted_training_resumes_with_matching_weights_and_metrics(tmp_path
                                torch.load(resumed / "best.pt", weights_only=False)["model"], rtol=1e-6, atol=1e-7)
 
     changed = load_config(config_file)
+    changed.train.feature_cache = "off"
+    changed.train.patience = 10
     changed.train.learning_rate *= 2
     try:
-        train(changed, extra, tmp_path / "interrupted", resume=partial)
+        train(changed, tmp_path / "interrupted", resume=partial)
     except ValueError as error:
         assert "configuration differs" in str(error)
     else:
@@ -277,5 +275,7 @@ def test_weighted_sampler_applies_on_frozen_feature_cache_path(tmp_path, monkeyp
     seen = []
     original = train_module._fit
     monkeypatch.setattr(train_module, "_fit", lambda model, loader, *a, **k: seen.append(loader) or original(model, loader, *a, **k))
-    train(load_config(config_file), {"feature_cache": "auto", "weighted_sampler": True}, tmp_path / "runs")
+    config = load_config(config_file)
+    config.train.weighted_sampler = True
+    train(config, tmp_path / "runs")
     assert isinstance(seen[0].sampler, torch.utils.data.WeightedRandomSampler)

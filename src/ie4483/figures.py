@@ -115,18 +115,19 @@ def model_architecture_figure(model: nn.Module, image_size: int, output_dir: str
     return paths
 
 
-def write_model_card(model: nn.Module, config: Any, training: dict[str, Any], output_dir: str | Path) -> Path:
+def write_model_card(model: nn.Module, config: Any, output_dir: str | Path) -> Path:
     """Write a Markdown model card from the built model and resolved settings."""
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
     summary = model_summary(model, config.data.image_size)
     layers = " → ".join(_module_name(layer) for layer in model.head)
+    training = config.train
     weights_source = "Torchvision ImageNet default weights" if config.model.pretrained else "None (random initialization)"
-    schedule = training["scheduler"]
+    schedule = training.scheduler
     if schedule == "cosine":
         schedule = f"cosine annealing over {config.train.epochs} epochs"
     elif schedule == "step":
-        schedule = f"StepLR, step_size={training['step_size']}, gamma={training['gamma']}"
+        schedule = f"StepLR, step_size={training.step_size}, gamma={training.gamma}"
     else:
         schedule = "none"
     text = f"""# Model card
@@ -138,9 +139,9 @@ def write_model_card(model: nn.Module, config: Any, training: dict[str, Any], ou
 - Input shape: `{summary['input_shape']}`
 - Output shape: `{summary['output_shape']}`
 - Head layers: {layers}
-- Loss: CrossEntropyLoss (label smoothing {training['label_smoothing']})
-- Optimizer: {training['optimizer'].upper()}
-- Learning rate: {config.train.learning_rate:g} (head); backbone {training['backbone_learning_rate']:g}
+- Loss: CrossEntropyLoss (label smoothing {training.label_smoothing})
+- Optimizer: {training.optimizer.upper()}
+- Learning rate: {config.train.learning_rate:g} (head); backbone {training.backbone_learning_rate:g}
 - Schedule: {schedule}
 - Selection: best.pt by validation accuracy; early stopping by validation loss.
 - Parameters: {summary['trainable_parameters']:,} trainable / {summary['total_parameters']:,} total

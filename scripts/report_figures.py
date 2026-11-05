@@ -10,7 +10,8 @@ from typing import Any
 
 import yaml
 
-from ie4483 import figures, proxy, train
+from ie4483 import figures, proxy
+from ie4483.config import load_config
 
 FIELDS = ("run", "backbone", "freeze_mode", "learning_rate", "augmentation", "epochs_run",
           "best_val_accuracy", "time_per_epoch", "proxy")
@@ -22,7 +23,7 @@ def _summarize_run(run_dir: Path) -> dict[str, Any]:
     if not metrics:
         raise ValueError(f"run has no epoch metrics: {run_dir}")
     config_values = yaml.safe_load((run_dir / "config.yaml").read_text(encoding="utf-8")) or {}
-    typed_config, _ = train.load_training_config(run_dir / "config.yaml")
+    typed_config = load_config(run_dir / "config.yaml")
     model = config_values.get("model", {})
     training_values = config_values.get("train", {})
     freeze_mode = model.get("freeze_mode")

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import dataclasses
+import types
 from pathlib import Path
-from typing import Any, TypeVar, get_type_hints
+from typing import Any, TypeVar, Union, get_args, get_origin, get_type_hints
 
 import yaml
 
@@ -13,6 +14,13 @@ from ie4483.paths import resolve_data_root
 T = TypeVar("T")
 
 FREEZE_MODES = ("frozen", "last_block", "full")
+# Fields restricted to a fixed set of (lower-case) values: (section, field) -> allowed values.
+CHOICES = {
+    ("model", "freeze_mode"): FREEZE_MODES,
+    ("train", "optimizer"): ("adamw", "sgd"),
+    ("train", "scheduler"): ("cosine", "step", "none"),
+    ("train", "feature_cache"): ("auto", "off"),
+}
 
 
 @dataclasses.dataclass
@@ -41,6 +49,27 @@ class TrainConfig:
     mixed_precision: bool = True
     gradient_accumulation_steps: int = 1
     deterministic: bool = True
+    # Optimisation.
+    optimizer: str = "adamw"
+    backbone_learning_rate: float = 0.0001
+    momentum: float = 0.9
+    weight_decay: float = 0.01
+    scheduler: str = "cosine"
+    step_size: int = 5
+    gamma: float = 0.1
+    warmup_epochs: int = 0
+    patience: int = 3
+    # Loss and class imbalance.
+    label_smoothing: float = 0.0
+    class_weights: list[float] | None = None
+    class_weighted: bool = False
+    weighted_sampler: bool = False
+    focal_gamma: float | None = None
+    imbalance_fractions: dict[str | int, float] | None = None
+    # Data loading and caching.
+    num_workers: int = 0
+    feature_cache: str = "auto"
+    cifar_augment: bool = True
 
 
 @dataclasses.dataclass
@@ -76,37 +105,64 @@ class Config:
         return resolve_data_root(self.data.root)
 
 
+_INVALID = object()
+
+
+def _convert(value: Any, annotation: Any) -> Any:
+    """Return ``value`` coerced to ``annotation`` (ints become floats), or ``_INVALID``."""
+    origin = get_origin(annotation)
+    if origin in (Union, types.UnionType):
+        for arm in get_args(annotation):
+            converted = _convert(value, arm)
+            if converted is not _INVALID:
+                return converted
+        return _INVALID
+    if annotation is type(None):
+        return None if value is None else _INVALID
+    if origin is list:
+        if not isinstance(value, list):
+            return _INVALID
+        items = [_convert(item, get_args(annotation)[0]) for item in value]
+        return _INVALID if any(item is _INVALID for item in items) else items
+    if origin is dict:
+        if not isinstance(value, dict):
+            return _INVALID
+        key_type, value_type = get_args(annotation)
+        pairs = [(_convert(k, key_type), _convert(v, value_type)) for k, v in value.items()]
+        return _INVALID if any(k is _INVALID or v is _INVALID for k, v in pairs) else dict(pairs)
+    if isinstance(value, bool):
+        return value if annotation is bool else _INVALID
+    if annotation is int:
+        return value if isinstance(value, int) else _INVALID
+    if annotation is float:
+        return float(value) if isinstance(value, (int, float)) else _INVALID
+    if annotation is str:
+        return value if isinstance(value, str) else _INVALID
+    return _INVALID
+
+
 def _construct(cls: type[T], values: Any, path: str = "") -> T:
     if not isinstance(values, dict):
         raise TypeError(f"configuration section '{path or 'root'}' must be a mapping")
     hints = get_type_hints(cls)
-    allowed = {field.name for field in dataclasses.fields(cls)}
-    unknown = set(values) - allowed
+    unknown = set(values) - {field.name for field in dataclasses.fields(cls)}
     if unknown:
         key = min(unknown)
         raise ValueError(f"unknown configuration key '{path + '.' if path else ''}{key}'")
     kwargs: dict[str, Any] = {}
-    nested = {"data": DataConfig, "model": ModelConfig, "train": TrainConfig, "eval": EvalConfig, "augment": AugmentConfig}
     for name, value in values.items():
         if cls is Config:
-            kwargs[name] = _construct(nested[name], value, name)
-        else:
-            expected = hints[name]
-            if name in {"root", "freeze_mode"} and value is None:
-                kwargs[name] = value
-                continue
-            origin = getattr(expected, "__origin__", None)
-            valid = (isinstance(value, list) and all(isinstance(item, expected.__args__[0]) and not isinstance(item, bool) for item in value)) if origin is list else (
-                isinstance(value, bool) if expected is bool else
-                isinstance(value, int) and not isinstance(value, bool) if expected is int else
-                isinstance(value, (int, float)) and not isinstance(value, bool) if expected is float else
-                isinstance(value, str)
-            )
-            if not valid:
-                raise ValueError(f"invalid type for '{path}.{name}'")
-            if name == "freeze_mode" and value not in FREEZE_MODES:
-                raise ValueError(f"'{path}.freeze_mode' must be one of {', '.join(FREEZE_MODES)}")
-            kwargs[name] = float(value) if expected is float else value
+            kwargs[name] = _construct(hints[name], value, name)
+            continue
+        converted = _convert(value, hints[name])
+        if converted is _INVALID:
+            raise ValueError(f"invalid type for '{path}.{name}'")
+        choices = CHOICES.get((path, name))
+        if isinstance(converted, str) and choices:
+            converted = converted.lower()
+        if choices and converted is not None and converted not in choices:
+            raise ValueError(f"'{path}.{name}' must be one of {', '.join(choices)}")
+        kwargs[name] = converted
     return cls(**kwargs)
 
 

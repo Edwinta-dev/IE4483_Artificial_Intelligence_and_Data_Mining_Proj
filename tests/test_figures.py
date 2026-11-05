@@ -16,10 +16,7 @@ def test_report_model_artifacts_match_forward_shapes(tmp_path, architecture: str
     summary = model_summary(model, 32)
     assert tuple(output.shape) == summary["output_shape"] == (1, 2)
     paths = model_architecture_figure(model, 32, tmp_path)
-    card = write_model_card(model, config, {
-        "optimizer": "adamw", "backbone_learning_rate": 0.0001, "scheduler": "cosine",
-        "step_size": 5, "gamma": 0.1, "label_smoothing": 0.0,
-    }, tmp_path)
+    card = write_model_card(model, config, tmp_path)
     assert all(path.is_file() and path.stat().st_size for path in paths)
     text = card.read_text(encoding="utf-8")
     assert f"Input shape: `{summary['input_shape']}`" in text

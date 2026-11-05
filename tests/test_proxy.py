@@ -76,6 +76,11 @@ def test_proxy_generator_layout_selection_and_audits(tmp_path):
     assert result.returncode == 0
 
 
+def _off(config):
+    config.train.feature_cache = "off"
+    return config
+
+
 def test_proxy_one_epoch_cpu_evaluate_and_predict(tmp_path, monkeypatch, request):
     from predict import predict
 
@@ -95,7 +100,7 @@ def test_proxy_one_epoch_cpu_evaluate_and_predict(tmp_path, monkeypatch, request
         "model:\n  architecture: resnet18\n  pretrained: false\n  freeze_backbone: true\n  num_classes: 2\n"
         "train:\n  seed: 4\n  epochs: 1\n  batch_size: 2\n  mixed_precision: false\n"
         "eval:\n  batch_size: 2\n", encoding="utf-8")
-    run = train(load_config(config_path), {"feature_cache": "off"}, tmp_path / "runs")
+    run = train(_off(load_config(config_path)), tmp_path / "runs")
     metrics = evaluate(run, tmp_path / "result.json")
     assert metrics["proxy"] is True
     assert json.loads((run / "val_metrics.json").read_text(encoding="utf-8"))["proxy"] is True

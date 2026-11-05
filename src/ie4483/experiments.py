@@ -18,7 +18,8 @@ import matplotlib.pyplot as plt
 import yaml
 
 from ie4483.evaluate import evaluate
-from ie4483.train import load_training_config, train
+from ie4483.config import load_config
+from ie4483.train import train
 
 
 def _override(key: str, value: Any) -> str:
@@ -28,8 +29,8 @@ def _override(key: str, value: Any) -> str:
 def _run_one(config_path: str | Path, seed: int, run_root: Path, overrides: list[str],
              resume_dir: Path | None = None) -> tuple[Path, float]:
     all_overrides = [*overrides, f"train.seed={seed}"]
-    config, extra = load_training_config(config_path, all_overrides)
-    run_dir = train(config, extra, run_root, resume=resume_dir)
+    config = load_config(config_path, all_overrides)
+    run_dir = train(config, run_root, resume=resume_dir)
     metrics = evaluate(run_dir, run_dir / "latest.json")
     return run_dir, float(metrics["accuracy"])
 

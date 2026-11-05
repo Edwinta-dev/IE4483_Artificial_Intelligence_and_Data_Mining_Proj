@@ -16,12 +16,12 @@ import numpy as np
 import torch
 from PIL import Image
 
+from ie4483.config import load_config
 from ie4483.cifar import CIFAR10Dataset, cifar_transform
 from ie4483.data import ImageFolderDataset, make_dataloader
 from ie4483.model import build_model
 from ie4483.proxy import proxy_metric
 from ie4483.seed import seed_everything
-from ie4483.train import load_training_config
 from ie4483.transforms import build_eval_transform
 
 _GALLERY_LIMIT = 5
@@ -91,7 +91,7 @@ def evaluate(run: str | Path, results_path: str | Path = "results/latest.json", 
     if split not in {"val", "test"}:
         raise ValueError("split must be val or test")
     run_dir = Path(run)
-    config, extra = load_training_config(run_dir / "config.yaml")
+    config = load_config(run_dir / "config.yaml")
     seed_everything(config.train.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = build_model(config).to(device)
@@ -105,7 +105,7 @@ def evaluate(run: str | Path, results_path: str | Path = "results/latest.json", 
     else:
         dataset = ImageFolderDataset(config.data_root, "val", config.data.classes, build_eval_transform(config),
                                      seed=config.train.seed)
-    loader = make_dataloader(dataset, config.eval.batch_size, extra["num_workers"])
+    loader = make_dataloader(dataset, config.eval.batch_size, config.eval.num_workers)
     truths: list[int] = []
     predictions: list[int] = []
     probabilities: list[float] = []

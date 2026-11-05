@@ -43,7 +43,7 @@ def test_predict_reads_generated_test_images_and_writes_sorted_rows(tmp_path, mo
     (run / "config.yaml").write_text("placeholder", encoding="utf-8")
     config = SimpleNamespace(
         data=SimpleNamespace(classes=["cat", "dog"]), data_root=tmp_path,
-        train=SimpleNamespace(seed=7), eval=SimpleNamespace(batch_size=2),
+        train=SimpleNamespace(seed=7), eval=SimpleNamespace(batch_size=2, num_workers=0),
     )
 
     class TinyModel(torch.nn.Module):
@@ -51,7 +51,7 @@ def test_predict_reads_generated_test_images_and_writes_sorted_rows(tmp_path, mo
             mean = images.mean(dim=(1, 2, 3))
             return torch.stack((1 - mean, mean), dim=1)
 
-    monkeypatch.setattr(predict_script, "load_training_config", lambda _: (config, {"num_workers": 0}))
+    monkeypatch.setattr(predict_script, "load_config", lambda _: config)
     monkeypatch.setattr(predict_script, "build_eval_transform", lambda _: lambda image: torch.from_numpy(
         __import__("numpy").array(image, copy=True)
     ).permute(2, 0, 1).float().div_(255))
