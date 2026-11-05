@@ -75,3 +75,13 @@ def test_training_hyperparameters_are_typed_and_validated():
         load_config(BASE, ["train.scheduler=linear"])
     with pytest.raises(ValueError, match="invalid type for 'train.patience'"):
         load_config(BASE, ["train.patience=abc"])
+
+
+def test_dataset_kind_is_explicit_or_inferred_from_class_count():
+    from ie4483.config import Config, DataConfig
+
+    assert Config().dataset_kind == "imagefolder"
+    assert Config(data=DataConfig(classes=[str(i) for i in range(10)])).dataset_kind == "cifar10"
+    assert Config(data=DataConfig(classes=[str(i) for i in range(10)], dataset="imagefolder")).dataset_kind == "imagefolder"
+    with pytest.raises(ValueError, match="'data.dataset' must be one of imagefolder, cifar10"):
+        load_config(BASE, ["data.dataset=imagenet"])

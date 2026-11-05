@@ -98,7 +98,7 @@ def evaluate(run: str | Path, results_path: str | Path = "results/latest.json", 
     checkpoint = torch.load(run_dir / "best.pt", map_location=device, weights_only=False)
     model.load_state_dict(checkpoint["model"])
     model.eval()
-    if len(config.data.classes) == 10:
+    if config.dataset_kind == "cifar10":
         dataset = CIFAR10Dataset(config.data_root, split, cifar_transform(config.data.image_size), config.train.seed)
     elif split == "test":
         raise ValueError("--split test is only supported for CIFAR-10")

@@ -1,6 +1,7 @@
 data:
   root: null
   image_size: 96
+  dataset: cifar10
   classes: [airplane, automobile, bird, cat, deer, dog, frog, horse, ship, truck]
 model:
   architecture: resnet18

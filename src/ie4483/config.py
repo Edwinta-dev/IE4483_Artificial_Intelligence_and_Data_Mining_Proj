@@ -16,6 +16,7 @@ T = TypeVar("T")
 FREEZE_MODES = ("frozen", "last_block", "full")
 # Fields restricted to a fixed set of (lower-case) values: (section, field) -> allowed values.
 CHOICES = {
+    ("data", "dataset"): ("imagefolder", "cifar10"),
     ("model", "freeze_mode"): FREEZE_MODES,
     ("train", "optimizer"): ("adamw", "sgd"),
     ("train", "scheduler"): ("cosine", "step", "none"),
@@ -27,6 +28,8 @@ CHOICES = {
 class DataConfig:
     root: str | None = None
     image_size: int = 224
+    # "imagefolder" or "cifar10"; when unset it is inferred from the class count (ten classes means CIFAR-10).
+    dataset: str | None = None
     classes: list[str] = dataclasses.field(default_factory=lambda: ["cat", "dog"])
 
 
@@ -103,6 +106,11 @@ class Config:
     def data_root(self) -> Path:
         """Resolved data directory using config, environment, then default."""
         return resolve_data_root(self.data.root)
+
+    @property
+    def dataset_kind(self) -> str:
+        """``data.dataset`` if set, otherwise inferred from the class count."""
+        return self.data.dataset or ("cifar10" if len(self.data.classes) == 10 else "imagefolder")
 
 
 _INVALID = object()

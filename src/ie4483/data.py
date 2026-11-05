@@ -12,7 +12,7 @@ from typing import Any
 import numpy as np
 import torch
 from PIL import Image, UnidentifiedImageError
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, Sampler
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tif", ".tiff", ".webp"}
 LOGGER = logging.getLogger(__name__)
@@ -143,8 +143,12 @@ def make_dataloader(
     *,
     shuffle: bool = False,
     seed: int = 42,
+    sampler: Sampler | None = None,
 ) -> DataLoader:
-    """Create a loader with deterministic shuffling and CUDA-aware pinning."""
+    """Create a loader with deterministic shuffling and CUDA-aware pinning.
+
+    ``sampler`` replaces shuffling (``shuffle`` is then ignored).
+    """
     if batch_size < 1 or num_workers < 0:
         raise ValueError("batch_size must be positive and num_workers non-negative")
     generator = torch.Generator()
@@ -152,7 +156,8 @@ def make_dataloader(
     return DataLoader(
         dataset,
         batch_size=batch_size,
-        shuffle=shuffle,
+        shuffle=shuffle and sampler is None,
+        sampler=sampler,
         num_workers=num_workers,
         pin_memory=torch.cuda.is_available(),
         generator=generator,

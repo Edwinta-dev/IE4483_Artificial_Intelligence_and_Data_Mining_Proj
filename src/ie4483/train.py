@@ -15,7 +15,7 @@ import numpy as np
 import torch
 import yaml
 from torch import nn
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import Subset, TensorDataset
 
 from ie4483.cifar import CIFAR10Dataset, cifar_transform
 from ie4483.config import Config, config_to_dict
@@ -44,7 +44,7 @@ def _metric(output: torch.Tensor, target: torch.Tensor) -> tuple[float, int]:
 
 
 def _manifest(dataset) -> list[tuple[str, int]]:
-    if isinstance(dataset, torch.utils.data.Subset):
+    if isinstance(dataset, Subset):
         base = _manifest(dataset.dataset)
         return [base[int(index)] for index in dataset.indices]
     return [(str(path), int(label)) for path, label in dataset.samples]
@@ -108,10 +108,10 @@ def _atomic_save(payload, path):
     temporary.replace(path)
 
 
-def _fit(model, train_loader, val_loader, cfg, run_dir, device, accumulation=None, checkpoint_model=None,
-         resume=False, class_weights=None):
+def _fit(model, train_loader, val_loader, cfg, run_dir, device, *, checkpoint_model=None, resume=False,
+         class_weights=None):
     model.to(device)
-    accumulation = accumulation or cfg.train.gradient_accumulation_steps
+    accumulation = cfg.train.gradient_accumulation_steps
     head_params = list(model.head.parameters())
     backbone_params = [p for p in model.backbone.parameters() if p.requires_grad] if hasattr(model, "backbone") else []
     groups = [{"params": head_params, "lr": cfg.train.learning_rate}]
@@ -196,11 +196,63 @@ def _fit(model, train_loader, val_loader, cfg, run_dir, device, accumulation=Non
     return run_dir
 
 
-def train(config: Config, run_root: str | Path | None = None, resume: str | Path | None = None) -> Path:
-    deterministic = bool(getattr(config.train, "deterministic", True))
-    seed_everything(config.train.seed, deterministic=deterministic)
-    run_root = Path(run_root) if run_root else Path("runs")
-    name = getattr(config.model, "name", config.model.architecture)
+def _dataset_labels(dataset) -> np.ndarray:
+    """Integer labels of a dataset, or of the selected rows of a ``Subset``."""
+    if isinstance(dataset, Subset):
+        return dataset.dataset.labels[dataset.indices]
+    return dataset.labels
+
+
+def _transform_description(config: Config) -> str:
+    if config.dataset_kind == "cifar10":
+        augmentation = "RandomCrop(padding=4) -> RandomHorizontalFlip" if config.train.cifar_augment else "none"
+        return f"CIFAR-10: Resize({config.data.image_size}) -> CIFAR Normalize; train: {augmentation}"
+    return describe_transforms(config)
+
+
+def _uses_augmentation(config: Config) -> bool:
+    if config.dataset_kind == "cifar10":
+        return config.train.cifar_augment
+    augment = config.augment
+    return any((augment.random_resized_crop, augment.horizontal_flip, augment.rotation_degrees, augment.color_jitter))
+
+
+def _cifar_datasets(config: Config, run_dir: Path):
+    seed, size = config.train.seed, config.data.image_size
+    train_ds = CIFAR10Dataset(config.data_root, "train", cifar_transform(size, config.train.cifar_augment), seed)
+    val_ds = CIFAR10Dataset(config.data_root, "val", cifar_transform(size), seed)
+    if config.train.imbalance_fractions:
+        train_ds, counts = imbalanced_subset(train_ds, config.train.imbalance_fractions, seed)
+    else:
+        counts = {label: int((train_ds.labels == label).sum()) for label in range(len(config.data.classes))}
+    write_class_counts(run_dir / "class_counts.json", {config.data.classes[label]: count for label, count in counts.items()})
+    return train_ds, val_ds
+
+
+def _image_folder_datasets(config: Config, run_dir: Path):
+    seed, classes = config.train.seed, config.data.classes
+    train_ds = ImageFolderDataset(config.data_root, "train", classes, build_train_transform(config, seed),
+                                  seed=seed, manifest_path=run_dir / "manifest.csv")
+    val_ds = ImageFolderDataset(config.data_root, "val", classes, build_eval_transform(config), seed=seed)
+    return train_ds, val_ds
+
+
+def _cached_features(config: Config, model, train_ds, val_ds, run_root: Path, device: torch.device):
+    """Pooled frozen-backbone features for both splits, built once per distinct input set."""
+    manifest = [entry for ds in (train_ds, val_ds) for entry in _manifest(ds)]
+    key = feature_cache_key({"model": dataclasses.asdict(config.model), "data": dataclasses.asdict(config.data)}, manifest)
+    path = run_root / "feature_cache" / f"{key}.pt"
+    train_cfg, eval_cfg = config.train, config.eval
+    payload, reused = load_or_create_cache(path, lambda: {
+        "train": extract_features(model, make_dataloader(train_ds, train_cfg.batch_size, train_cfg.num_workers,
+                                                         seed=train_cfg.seed), device),
+        "val": extract_features(model, make_dataloader(val_ds, eval_cfg.batch_size, eval_cfg.num_workers), device),
+    })
+    LOGGER.info("Using %s frozen feature cache at %s", "reused" if reused else "built", path)
+    return payload["train"], payload["val"]
+
+
+def _prepare_run_dir(config: Config, run_root: Path, resume: str | Path | None) -> Path:
     run_config = config_to_dict(config)
     if resume is not None:
         run_dir = Path(resume)
@@ -209,75 +261,41 @@ def train(config: Config, run_root: str | Path | None = None, resume: str | Path
         saved_config = yaml.safe_load((run_dir / "config.yaml").read_text(encoding="utf-8"))
         if saved_config != run_config:
             raise ValueError("resume configuration differs from the saved run configuration")
-    else:
-        run_dir = run_root / f"{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}-{name}"
-        run_dir.mkdir(parents=True, exist_ok=False)
-        (run_dir / "config.yaml").write_text(yaml.safe_dump(run_config, sort_keys=False), encoding="utf-8")
-    cifar_train = "RandomCrop(padding=4) -> RandomHorizontalFlip" if config.train.cifar_augment else "none"
-    transform_description = (f"CIFAR-10: Resize({config.data.image_size}) -> CIFAR Normalize; train: {cifar_train}"
-                             if len(config.data.classes) == 10 else describe_transforms(config))
-    (run_dir / "transforms.txt").write_text(transform_description, encoding="utf-8")
+        return run_dir
+    run_dir = run_root / f"{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}-{config.model.architecture}"
+    run_dir.mkdir(parents=True, exist_ok=False)
+    (run_dir / "config.yaml").write_text(yaml.safe_dump(run_config, sort_keys=False), encoding="utf-8")
+    return run_dir
+
+
+def train(config: Config, run_root: str | Path | None = None, resume: str | Path | None = None) -> Path:
+    """Train ``config`` into a fresh run folder under ``run_root`` (or resume ``resume``) and return it."""
+    settings = config.train
+    seed_everything(settings.seed, deterministic=settings.deterministic)
+    run_root = Path(run_root) if run_root else Path("runs")
+    run_dir = _prepare_run_dir(config, run_root, resume)
+    (run_dir / "transforms.txt").write_text(_transform_description(config), encoding="utf-8")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = build_model(config)
-    model.to(device)
-    manifest = run_dir / "manifest.csv"
-    if len(config.data.classes) == 10:
-        train_ds = CIFAR10Dataset(config.data_root, "train", cifar_transform(config.data.image_size, bool(config.train.cifar_augment)),
-                                 config.train.seed)
-        val_ds = CIFAR10Dataset(config.data_root, "val", cifar_transform(config.data.image_size), config.train.seed)
-        if config.train.imbalance_fractions:
-            train_ds, counts = imbalanced_subset(train_ds, config.train.imbalance_fractions, config.train.seed)
-        else:
-            counts = {int(label): int((train_ds.labels == label).sum()) for label in range(len(config.data.classes))}
-        write_class_counts(run_dir / "class_counts.json",
-                           {config.data.classes[label]: count for label, count in counts.items()})
-    else:
-        train_transform = build_train_transform(config, config.train.seed)
-        eval_transform = build_eval_transform(config)
-        train_ds = ImageFolderDataset(config.data_root, "train", config.data.classes, train_transform,
-                                      seed=config.train.seed, manifest_path=manifest)
-        val_ds = ImageFolderDataset(config.data_root, "val", config.data.classes, eval_transform, seed=config.train.seed)
-    batch = config.train.batch_size
-    sampler = None
-    if config.train.weighted_sampler:
-        labels = train_ds.dataset.labels[train_ds.indices] if isinstance(train_ds, torch.utils.data.Subset) else train_ds.labels
-        sampler = balanced_sampler(labels, config.train.seed)
-    train_loader = (DataLoader(train_ds, batch_size=batch, sampler=sampler, num_workers=config.train.num_workers)
-                    if sampler is not None else make_dataloader(train_ds, batch, config.train.num_workers,
-                                                                shuffle=True, seed=config.train.seed))
-    class_weight_values = None
-    if config.train.class_weighted:
-        labels = train_ds.dataset.labels[train_ds.indices] if isinstance(train_ds, torch.utils.data.Subset) else train_ds.labels
-        weights = class_weights(labels, len(config.data.classes)).tolist()
-        class_weight_values = weights
-    val_loader = make_dataloader(val_ds, config.eval.batch_size, config.eval.num_workers)
-    frozen = getattr(model, "freeze_mode", "frozen") == "frozen"
-    is_cifar = len(config.data.classes) == 10
-    augment = bool(config.train.cifar_augment) if is_cifar else any((config.augment.random_resized_crop, config.augment.horizontal_flip,
-                   config.augment.rotation_degrees, config.augment.color_jitter))
-    cache_mode = config.train.feature_cache
-    if cache_mode not in {"auto", "off"}:
-        raise ValueError("train.feature_cache must be auto or off")
-    if cache_mode == "auto" and frozen and not augment:
-        manifest_values = [entry for ds in (train_ds, val_ds) for entry in _manifest(ds)]
-        key = feature_cache_key({"model": dataclasses.asdict(config.model), "data": dataclasses.asdict(config.data)}, manifest_values)
-        cache_dir = run_root / "feature_cache"
-        cache_path = cache_dir / f"{key}.pt"
-        payload, reused = load_or_create_cache(cache_path, lambda: {
-            "train": extract_features(model, make_dataloader(train_ds, batch, config.train.num_workers, seed=config.train.seed), device),
-            "val": extract_features(model, make_dataloader(val_ds, config.eval.batch_size, config.eval.num_workers), device),
-        })
-        LOGGER.info("Using %s frozen feature cache at %s", "reused" if reused else "built", cache_path)
-        train_data, val_data = payload["train"], payload["val"]
+    model = build_model(config).to(device)
+    train_ds, val_ds = (_cifar_datasets if config.dataset_kind == "cifar10" else _image_folder_datasets)(config, run_dir)
+
+    sampler = balanced_sampler(_dataset_labels(train_ds), settings.seed) if settings.weighted_sampler else None
+    class_weight_values = (class_weights(_dataset_labels(train_ds), len(config.data.classes)).tolist()
+                           if settings.class_weighted else None)
+    frozen = model.freeze_mode == "frozen"
+    augment = _uses_augmentation(config)
+    use_cache = settings.feature_cache == "auto" and frozen and not augment
+    fit_args = dict(resume=resume is not None, class_weights=class_weight_values)
+    if use_cache:
+        train_data, val_data = _cached_features(config, model, train_ds, val_ds, run_root, device)
         # Cached features keep the training-set order, so the balanced sampler's weights still line up.
-        train_loader = (DataLoader(TensorDataset(*train_data), batch_size=config.train.batch_size, sampler=sampler)
-                        if sampler is not None else
-                        DataLoader(TensorDataset(*train_data), batch_size=config.train.batch_size, shuffle=True,
-                                   generator=torch.Generator().manual_seed(config.train.seed)))
-        val_loader = DataLoader(TensorDataset(*val_data), batch_size=config.eval.batch_size)
+        train_loader = make_dataloader(TensorDataset(*train_data), settings.batch_size, shuffle=sampler is None,
+                                       seed=settings.seed, sampler=sampler)
+        val_loader = make_dataloader(TensorDataset(*val_data), config.eval.batch_size)
         return _fit(_HeadOnly(model.head), train_loader, val_loader, config, run_dir, device,
-                    config.train.gradient_accumulation_steps, checkpoint_model=model, resume=resume is not None,
-                    class_weights=class_weight_values)
-    LOGGER.info("Using image training path (cache=%s, frozen=%s, augment=%s)", cache_mode, frozen, augment)
-    return _fit(model, train_loader, val_loader, config, run_dir, device, resume=resume is not None,
-                class_weights=class_weight_values)
+                    checkpoint_model=model, **fit_args)
+    LOGGER.info("Using image training path (cache=%s, frozen=%s, augment=%s)", settings.feature_cache, frozen, augment)
+    train_loader = make_dataloader(train_ds, settings.batch_size, settings.num_workers, shuffle=sampler is None,
+                                   seed=settings.seed, sampler=sampler)
+    val_loader = make_dataloader(val_ds, config.eval.batch_size, config.eval.num_workers)
+    return _fit(model, train_loader, val_loader, config, run_dir, device, **fit_args)
